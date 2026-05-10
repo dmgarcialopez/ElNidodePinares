@@ -44,7 +44,7 @@ function showMap(tipo) {
             lng = parseNum(fila[3]);
             latCoche = parseNum(fila[4]); 
             lngCoche = parseNum(fila[5]);
-            // CAMBIO SOLICITADO: Usar Columna 8 (índice 7) para Paseos
+            // USAR COLUMNA 8 (índice 7) para el enlace principal del paseo
             urlPrincipal = String(fila[7] || "").trim(); 
         }
 
@@ -70,8 +70,16 @@ function showMap(tipo) {
                     show: (latCoche && lngCoche), 
                     fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}&travelmode=driving`, '_blank') 
                 },
-                { img: 'compartir.png', show: urlPrincipal.startsWith('http'), fn: () => shareContent(fila[0], urlPrincipal) },
-                { img: 'video.png', show: urlVideo.startsWith('http'), fn: () => window.open(urlVideo, '_blank') }
+                { 
+                    img: 'compartir.png', 
+                    show: urlPrincipal.startsWith('http'), 
+                    fn: () => shareContent(fila[0], urlPrincipal) // Comparte la Columna 8 en paseos
+                },
+                { 
+                    img: 'video.png', 
+                    show: urlVideo.startsWith('http'), 
+                    fn: () => window.open(urlVideo, '_blank') 
+                }
             ];
 
             botones.forEach(b => {
@@ -161,8 +169,10 @@ function goHome() {
 
 async function shareContent(titulo, url) {
     if (navigator.share) {
-        try { await navigator.share({ title: titulo, url: url }); } catch (e) {}
-    } else { alert("Copiado: " + url); }
+        try { await navigator.share({ title: titulo, text: 'Mira esta ruta: ' + titulo, url: url }); } catch (e) {}
+    } else { 
+        prompt("Copia el enlace:", url);
+    }
 }
 
 function parseNum(v) {

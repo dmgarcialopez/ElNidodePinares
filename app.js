@@ -7,7 +7,6 @@ const URLS = {
 let db = { pois: [], bici: [], paseo: [] };
 let map = null;
 
-// Carga inicial
 window.onload = async () => {
     for (let key in URLS) {
         Papa.parse(URLS[key], {
@@ -17,9 +16,9 @@ window.onload = async () => {
     }
 };
 
-// Control de navegación atrás del móvil
 window.onpopstate = function() { goHome(); };
 
+// --- NAVEGACIÓN ---
 function showMap(tipo) {
     history.pushState({ screen: 'view' }, '');
     document.getElementById('home-screen').classList.add('hidden');
@@ -32,10 +31,8 @@ function showMap(tipo) {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     let markerCoords = [];
-
     db[tipo].forEach(fila => {
         let lat, lng, latCoche, lngCoche, urlPrincipal;
-        
         if (tipo === 'pois') { 
             lat = parseNum(fila[4]); lng = parseNum(fila[5]);
             latCoche = lat; lngCoche = lng;
@@ -43,43 +40,26 @@ function showMap(tipo) {
         } else if (tipo === 'paseo') {
             lat = parseNum(fila[2]); lng = parseNum(fila[3]);
             latCoche = parseNum(fila[4]); lngCoche = parseNum(fila[5]);
-            urlPrincipal = String(fila[7] || "").trim(); // Columna 8
+            urlPrincipal = String(fila[7] || "").trim(); 
         }
 
         if (lat && lng) {
             const m = L.marker([lat, lng]).addTo(map);
             markerCoords.push([lat, lng]);
-
             const container = document.createElement('div');
             container.style.textAlign = "center";
             const urlVideo = String(fila[8] || "").trim();
-
             const title = document.createElement('div');
             title.innerHTML = `<b style="color:#2e7d32; font-size:16px; display:block; margin-bottom:12px; cursor:pointer; text-decoration:underline;">${fila[0]}</b>`;
             title.onclick = () => { if(urlPrincipal.startsWith('http')) window.open(urlPrincipal, '_blank'); };
             container.appendChild(title);
-
             const actions = document.createElement('div');
             actions.style.display = "flex"; actions.style.justifyContent = "center"; actions.style.gap = "15px";
-
             const botones = [
-                { 
-                    img: 'coche.png', 
-                    show: (latCoche && lngCoche), 
-                    fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}&travelmode=driving`, '_blank') 
-                },
-                { 
-                    img: 'compartir.png', 
-                    show: urlPrincipal.startsWith('http'), 
-                    fn: () => shareContent(fila[0], urlPrincipal) 
-                },
-                { 
-                    img: 'video.png', 
-                    show: urlVideo.startsWith('http'), 
-                    fn: () => window.open(urlVideo, '_blank') 
-                }
+                { img: 'coche.png', show: (latCoche && lngCoche), fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}&travelmode=driving`, '_blank') },
+                { img: 'compartir.png', show: urlPrincipal.startsWith('http'), fn: () => shareContent(fila[0], urlPrincipal) },
+                { img: 'video.png', show: urlVideo.startsWith('http'), fn: () => window.open(urlVideo, '_blank') }
             ];
-
             botones.forEach(b => {
                 if (b.show) {
                     const icon = document.createElement('img');
@@ -93,12 +73,7 @@ function showMap(tipo) {
             m.bindPopup(container);
         }
     });
-
-    if (markerCoords.length > 0) {
-        map.fitBounds(markerCoords, { padding: [50, 50] });
-    } else {
-        map.setView([41.838, -3.004], 14);
-    }
+    if (markerCoords.length > 0) map.fitBounds(markerCoords, { padding: [50, 50] });
 }
 
 function showBiciList() {
@@ -109,7 +84,6 @@ function showBiciList() {
     const list = document.getElementById('list-container');
     list.classList.remove('hidden');
     list.innerHTML = `<h2 style="color:white; text-align:center; margin-bottom:20px;">Rutas BTT</h2>`;
-    
     db.bici.forEach(fila => {
         const div = document.createElement('div');
         div.className = 'lista-item';
@@ -127,6 +101,7 @@ function showBiciList() {
     });
 }
 
+// --- LÓGICA DE VOZ ---
 function startVoiceSearch() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -147,31 +122,50 @@ function processSearch(query) {
     let found = null;
     const q = query.toLowerCase().trim();
 
-    // Función que busca en TODAS las columnas de la fila (Nombre, Tags, etc.)
-    const searchInRow = (fila) => fila.some(celda => String(celda).toLowerCase().includes(q));
+    // Regla 1: Si dice "bici", busca en sheet Bici, columna 2 (índice 1)
+    if (q.includes("bici")) {
+        const searchTerm = q.replace("bici", "").trim();
+        db.bici.forEach(fila => {
+            if (String(fila[1]).toLowerCase().includes(searchTerm)) {
+                const urlRuta = String(fila[5] || "").trim();
+                if(urlRuta.startsWith('http')) window.open(urlRuta, '_blank');
+                found = true;
+            }
+        });
+    } 
+    // Regla 2: Si dice "paseo", busca en sheet Paseo, columna 7 (índice 6)
+    else if (q.includes("paseo")) {
+        const searchTerm = q.replace("paseo", "").trim();
+        db.paseo.forEach(fila => {
+            if (String(fila[6]).toLowerCase().includes(searchTerm)) {
+                found = { f: fila, tipo: 'paseo' };
+            }
+        });
+    } 
+    // Regla 3: En cualquier otro caso, busca en sheet POIs, columna 10 (índice 9)
+    else {
+        db.pois.forEach(fila => {
+            if (String(fila[9]).toLowerCase().includes(q)) {
+                found = { f: fila, tipo: 'pois' };
+            }
+        });
+    }
 
-    // Buscar en POIs
-    db.pois.forEach(f => { if (searchInRow(f)) found = { f, tipo: 'pois' }; });
-    // Si no está, buscar en Paseos
-    if (!found) db.paseo.forEach(f => { if (searchInRow(f)) found = { f, tipo: 'paseo' }; });
-
-    if (found) {
+    if (found && found !== true) {
         showMap(found.tipo);
         setTimeout(() => {
             let lat, lng;
             if (found.tipo === 'pois') { lat = parseNum(found.f[4]); lng = parseNum(found.f[5]); }
             else { lat = parseNum(found.f[2]); lng = parseNum(found.f[3]); }
-            
             if (lat && lng) {
                 map.setView([lat, lng], 18);
-                // Abrir el popup del marcador automáticamente
                 map.eachLayer(layer => {
                     if (layer instanceof L.Marker && layer.getLatLng().lat === lat) layer.openPopup();
                 });
             }
         }, 600);
-    } else {
-        document.getElementById('mic-status').innerText = "No encontré '" + query + "'";
+    } else if (!found) {
+        document.getElementById('mic-status').innerText = "Sin resultados";
         setTimeout(() => { document.getElementById('mic-status').innerText = ""; }, 3000);
     }
 }
@@ -184,7 +178,7 @@ function goHome() {
 
 async function shareContent(titulo, url) {
     if (navigator.share) {
-        try { await navigator.share({ title: titulo, text: 'Mira esta ruta: ' + titulo, url: url }); } catch (e) {}
+        try { await navigator.share({ title: titulo, text: 'Ruta: ' + titulo, url: url }); } catch (e) {}
     } else { alert("Enlace: " + url); }
 }
 

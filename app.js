@@ -7,6 +7,7 @@ const URLS = {
 let db = { pois: [], bici: [], paseo: [] };
 let map = null;
 
+// Carga inicial
 window.onload = async () => {
     for (let key in URLS) {
         Papa.parse(URLS[key], {
@@ -16,6 +17,7 @@ window.onload = async () => {
     }
 };
 
+// Control de navegación atrás del móvil
 window.onpopstate = function() { goHome(); };
 
 function showMap(tipo) {
@@ -35,17 +37,13 @@ function showMap(tipo) {
         let lat, lng, latCoche, lngCoche, urlPrincipal;
         
         if (tipo === 'pois') { 
-            lat = parseNum(fila[4]); 
-            lng = parseNum(fila[5]);
+            lat = parseNum(fila[4]); lng = parseNum(fila[5]);
             latCoche = lat; lngCoche = lng;
-            urlPrincipal = String(fila[1] || "").trim(); // Columna 2 para POIs
+            urlPrincipal = String(fila[1] || "").trim();
         } else if (tipo === 'paseo') {
-            lat = parseNum(fila[2]); 
-            lng = parseNum(fila[3]);
-            latCoche = parseNum(fila[4]); 
-            lngCoche = parseNum(fila[5]);
-            // USAR COLUMNA 8 (índice 7) para el enlace principal del paseo
-            urlPrincipal = String(fila[7] || "").trim(); 
+            lat = parseNum(fila[2]); lng = parseNum(fila[3]);
+            latCoche = parseNum(fila[4]); lngCoche = parseNum(fila[5]);
+            urlPrincipal = String(fila[7] || "").trim(); // Columna 8
         }
 
         if (lat && lng) {
@@ -73,7 +71,7 @@ function showMap(tipo) {
                 { 
                     img: 'compartir.png', 
                     show: urlPrincipal.startsWith('http'), 
-                    fn: () => shareContent(fila[0], urlPrincipal) // Comparte la Columna 8 en paseos
+                    fn: () => shareContent(fila[0], urlPrincipal) 
                 },
                 { 
                     img: 'video.png', 
@@ -147,17 +145,34 @@ function startVoiceSearch() {
 
 function processSearch(query) {
     let found = null;
-    db.pois.forEach(f => { if(f[0].toLowerCase().includes(query)) found = {f, tipo:'pois'}; });
-    if(!found) db.paseo.forEach(f => { if(f[0].toLowerCase().includes(query)) found = {f, tipo:'paseo'}; });
+    const q = query.toLowerCase().trim();
+
+    // Función que busca en TODAS las columnas de la fila (Nombre, Tags, etc.)
+    const searchInRow = (fila) => fila.some(celda => String(celda).toLowerCase().includes(q));
+
+    // Buscar en POIs
+    db.pois.forEach(f => { if (searchInRow(f)) found = { f, tipo: 'pois' }; });
+    // Si no está, buscar en Paseos
+    if (!found) db.paseo.forEach(f => { if (searchInRow(f)) found = { f, tipo: 'paseo' }; });
+
     if (found) {
         showMap(found.tipo);
         setTimeout(() => {
-            let lat = parseNum(found.tipo === 'pois' ? found.f[4] : found.f[2]);
-            let lng = parseNum(found.tipo === 'pois' ? found.f[5] : found.f[3]);
-            if(lat && lng) map.setView([lat, lng], 17);
+            let lat, lng;
+            if (found.tipo === 'pois') { lat = parseNum(found.f[4]); lng = parseNum(found.f[5]); }
+            else { lat = parseNum(found.f[2]); lng = parseNum(found.f[3]); }
+            
+            if (lat && lng) {
+                map.setView([lat, lng], 18);
+                // Abrir el popup del marcador automáticamente
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker && layer.getLatLng().lat === lat) layer.openPopup();
+                });
+            }
         }, 600);
     } else {
-        document.getElementById('mic-status').innerText = "Sin resultados";
+        document.getElementById('mic-status').innerText = "No encontré '" + query + "'";
+        setTimeout(() => { document.getElementById('mic-status').innerText = ""; }, 3000);
     }
 }
 
@@ -170,9 +185,7 @@ function goHome() {
 async function shareContent(titulo, url) {
     if (navigator.share) {
         try { await navigator.share({ title: titulo, text: 'Mira esta ruta: ' + titulo, url: url }); } catch (e) {}
-    } else { 
-        prompt("Copia el enlace:", url);
-    }
+    } else { alert("Enlace: " + url); }
 }
 
 function parseNum(v) {

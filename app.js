@@ -122,36 +122,40 @@ function processSearch(query) {
     let found = null;
     const q = query.toLowerCase().trim();
 
-    // Función de comparación flexible: true si el tag está en la frase o viceversa
-    const match = (tagExcel, fraseVoz) => {
-        if (!tagExcel || !fraseVoz) return false;
-        const tag = String(tagExcel).toLowerCase().trim();
-        const frase = String(fraseVoz).toLowerCase().trim();
-        return frase.includes(tag) || tag.includes(frase);
-    };
-
-    // 1. Caso BICI (Columna 2 -> índice 1)
+    // 1. Prioridad BICI
     if (q.includes("bici")) {
-        db.bici.forEach(fila => {
-            if (match(fila[1], q)) {
+        for (let fila of db.bici) {
+            let tagExcel = String(fila[1] || "").toLowerCase().trim();
+            if (tagExcel !== "" && q.includes(tagExcel)) {
                 const url = String(fila[5] || "").trim();
-                if(url.startsWith('http')) { window.open(url, '_blank'); found = true; }
+                if(url.startsWith('http')) window.open(url, '_blank');
+                found = true;
+                break; // Paramos en el primero que coincida
             }
-        });
+        }
     } 
-    // 2. Caso PASEO (Columna 7 -> índice 6)
+    // 2. Prioridad PASEO
     else if (q.includes("paseo")) {
-        db.paseo.forEach(fila => {
-            if (match(fila[6], q)) found = { f: fila, tipo: 'paseo' };
-        });
+        for (let fila of db.paseo) {
+            let tagExcel = String(fila[6] || "").toLowerCase().trim();
+            if (tagExcel !== "" && q.includes(tagExcel)) {
+                found = { f: fila, tipo: 'paseo' };
+                break;
+            }
+        }
     } 
-    // 3. Caso RESTO / POIS (Columna 10 -> índice 9)
+    // 3. Prioridad POIS (Resto de casos)
     else {
-        db.pois.forEach(fila => {
-            if (match(fila[9], q)) found = { f: fila, tipo: 'pois' };
-        });
+        for (let fila of db.pois) {
+            let tagExcel = String(fila[9] || "").toLowerCase().trim();
+            if (tagExcel !== "" && q.includes(tagExcel)) {
+                found = { f: fila, tipo: 'pois' };
+                break;
+            }
+        }
     }
 
+    // Ejecutar acción si hubo match
     if (found && found !== true) {
         showMap(found.tipo);
         setTimeout(() => {

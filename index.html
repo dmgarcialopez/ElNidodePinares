@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>El Nido de Pinares</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        
+        <section id="home-screen" class="screen">
+            <header>
+                <img src="icons/logo-hotel.png" class="logo" alt="Logo">
+                <h1>El Nido de Pinares</h1>
+                <h3>Hotel Rural con SPA en la Comarca de Pinares entre Burgos y Soria</h3>
+                <h4><br>Turismo Rural y Rutas<br></h4>
+            </header>
+            
+            <div class="menu-principal">
+                <div class="bloque-grid">
+                    <button onclick="showBiciList()" class="btn-circle"><img src="icons/bici.png"></button>
+                    <button onclick="showMap('pois')" class="btn-circle"><img src="icons/poi.png"></button>
+                    <button onclick="showMap('paseo')" class="btn-circle"><img src="icons/walk.png"></button>
+                    
+                    <a href="https://www.elnidodepinares.es/actividades" class="btn-circle"><img src="icons/climb.png"></a>
+                    <a href="https://www.elnidodepinares.es" class="btn-circle"><img src="icons/logo-small.png"></a>
+                    <a href="https://www.elnidodepinares.es/nuestro-blog" class="btn-circle"><img src="icons/photos.png"></a>
+                </div>
+
+                <div class="bloque-flex">
+                    <a href="https://www.elnidodepinares.es/hoteles" class="btn-circle"><img src="icons/hotel.png"></a>
+                    <a href="https://www.elnidodepinares.es/donde-comer" class="btn-circle"><img src="icons/food.png"></a>
+                </div>
+
+                <div class="bloque-extra" style="margin-top: 15px; text-align: center;">
+                    <button onclick="startVoiceSearch()" class="btn-circle">
+                        <img src="icons/microfono.png">
+                    </button>
+                    <div id="mic-status" style="font-size: 11px; font-weight: bold; margin-top: 5px; height: 12px; text-shadow: 1px 1px 2px black;"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-screen" class="screen hidden">
+            <button onclick="goHome()" class="back-btn">⬅ Volver</button>
+            <div id="map-container"></div>
+            <div id="list-container" class="hidden"></div>
+        </section>
+
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -7,7 +7,6 @@ const URLS = {
 let db = { pois: [], bici: [], paseo: [] };
 let map = null;
 
-// Carga de datos inicial
 window.onload = async () => {
     for (let key in URLS) {
         Papa.parse(URLS[key], {
@@ -17,15 +16,10 @@ window.onload = async () => {
     }
 };
 
-// --- CONTROL DE GESTO ATRÁS (MÓVIL) ---
-window.onpopstate = function(event) {
-    goHome();
-};
+window.onpopstate = function() { goHome(); };
 
-// --- FUNCIÓN MOSTRAR MAPA (POIS Y PASEOS) ---
 function showMap(tipo) {
-    history.pushState({ screen: 'view' }, ''); // Registra estado para el botón atrás
-
+    history.pushState({ screen: 'view' }, '');
     document.getElementById('home-screen').classList.add('hidden');
     document.getElementById('view-screen').classList.remove('hidden');
     document.getElementById('list-container').classList.add('hidden');
@@ -53,7 +47,6 @@ function showMap(tipo) {
 
             const container = document.createElement('div');
             container.style.textAlign = "center";
-            container.style.minWidth = "165px";
             const urlBlog = String(fila[1] || "").trim();
             const urlVideo = String(fila[8] || "").trim();
 
@@ -65,8 +58,13 @@ function showMap(tipo) {
             const actions = document.createElement('div');
             actions.style.display = "flex"; actions.style.justifyContent = "center"; actions.style.gap = "15px";
 
+            // CORRECCIÓN CLAVE: Usamos Maps Dir para forzar navegación y evitar MyMaps
             const botones = [
-                { img: 'coche.png', show: (latCoche && lngCoche), fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}`, '_blank') },
+                { 
+                    img: 'coche.png', 
+                    show: (latCoche && lngCoche), 
+                    fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}&travelmode=driving`, '_blank') 
+                },
                 { img: 'compartir.png', show: urlBlog.startsWith('http'), fn: () => shareContent(fila[0], urlBlog) },
                 { img: 'video.png', show: urlVideo.startsWith('http'), fn: () => window.open(urlVideo, '_blank') }
             ];
@@ -75,7 +73,7 @@ function showMap(tipo) {
                 if (b.show) {
                     const icon = document.createElement('img');
                     icon.src = `icons/${b.img}`;
-                    icon.style.width = "32px"; icon.style.height = "32px"; icon.style.cursor = "pointer";
+                    icon.style.width = "32px"; icon.style.cursor = "pointer";
                     icon.onclick = (e) => { e.stopPropagation(); b.fn(); };
                     actions.appendChild(icon);
                 }
@@ -85,7 +83,6 @@ function showMap(tipo) {
         }
     });
 
-    // Ajuste automático de zoom y centrado
     if (markerCoords.length > 0) {
         map.fitBounds(markerCoords, { padding: [50, 50] });
     } else {
@@ -93,49 +90,38 @@ function showMap(tipo) {
     }
 }
 
-// --- FUNCIÓN MOSTRAR LISTA BICI ---
 function showBiciList() {
-    history.pushState({ screen: 'view' }, ''); // También registra estado aquí
-
+    history.pushState({ screen: 'view' }, '');
     document.getElementById('home-screen').classList.add('hidden');
     document.getElementById('view-screen').classList.remove('hidden');
     document.getElementById('map-container').classList.add('hidden');
     const list = document.getElementById('list-container');
     list.classList.remove('hidden');
-    
     list.innerHTML = `<h2 style="color:white; text-align:center; margin-bottom:20px;">Rutas BTT</h2>`;
     
     db.bici.forEach(fila => {
         const div = document.createElement('div');
         div.className = 'lista-item';
         div.style.display = "flex"; div.style.alignItems = "center"; div.style.padding = "10px 15px";
-        
         const urlRuta = String(fila[5] || "").trim();
-
         const shareBtn = document.createElement('img');
         shareBtn.src = 'icons/compartir.png';
         shareBtn.style.width = "28px"; shareBtn.style.marginRight = "15px";
         shareBtn.onclick = (e) => { e.stopPropagation(); if(urlRuta.startsWith('http')) shareContent(fila[0], urlRuta); };
-
         const nameSpan = document.createElement('span');
         nameSpan.style.flexGrow = "1"; nameSpan.innerHTML = fila[0];
-
-        div.appendChild(shareBtn);
-        div.appendChild(nameSpan);
+        div.appendChild(shareBtn); div.appendChild(nameSpan);
         div.onclick = () => { if(urlRuta.startsWith('http')) window.open(urlRuta, '_blank'); };
         list.appendChild(div);
     });
 }
 
-// --- BÚSQUEDA POR VOZ ---
 function startVoiceSearch() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("Micro no compatible"); return; }
-    
+    if (!SpeechRecognition) return;
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-ES';
     const status = document.getElementById('mic-status');
-    
     recognition.onstart = () => { status.innerText = "Escuchando..."; };
     recognition.onresult = (event) => {
         const text = event.results[0][0].transcript.toLowerCase();
@@ -150,7 +136,6 @@ function processSearch(query) {
     let found = null;
     db.pois.forEach(f => { if(f[0].toLowerCase().includes(query)) found = {f, tipo:'pois'}; });
     if(!found) db.paseo.forEach(f => { if(f[0].toLowerCase().includes(query)) found = {f, tipo:'paseo'}; });
-
     if (found) {
         showMap(found.tipo);
         setTimeout(() => {
@@ -163,17 +148,16 @@ function processSearch(query) {
     }
 }
 
-// --- UTILIDADES ---
 function goHome() {
-    if(document.getElementById('mic-status')) document.getElementById('mic-status').innerText = "";
     document.getElementById('view-screen').classList.add('hidden');
     document.getElementById('home-screen').classList.remove('hidden');
+    if(document.getElementById('mic-status')) document.getElementById('mic-status').innerText = "";
 }
 
 async function shareContent(titulo, url) {
     if (navigator.share) {
         try { await navigator.share({ title: titulo, url: url }); } catch (e) {}
-    } else { alert("Enlace: " + url); }
+    } else { alert("Copiado: " + url); }
 }
 
 function parseNum(v) {

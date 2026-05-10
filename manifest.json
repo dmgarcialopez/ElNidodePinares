@@ -1,0 +1,15 @@
+{
+  "short_name": "El Nido",
+  "name": "El Nido de Pinares",
+  "icons": [
+    {
+      "src": "icons/logo-hotel.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2e7d32",
+  "background_color": "#ffffff"
+}

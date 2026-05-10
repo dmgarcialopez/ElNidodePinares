@@ -18,7 +18,7 @@ window.onload = async () => {
 
 window.onpopstate = function() { goHome(); };
 
-// --- NAVEGACIÓN ---
+// --- VISUALIZACIÓN ---
 function showMap(tipo) {
     history.pushState({ screen: 'view' }, '');
     document.getElementById('home-screen').classList.add('hidden');
@@ -101,7 +101,7 @@ function showBiciList() {
     });
 }
 
-// --- LÓGICA DE VOZ ---
+// --- LÓGICA DE VOZ Y BÚSQUEDA ---
 function startVoiceSearch() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -122,32 +122,33 @@ function processSearch(query) {
     let found = null;
     const q = query.toLowerCase().trim();
 
-    // Regla 1: Si dice "bici", busca en sheet Bici, columna 2 (índice 1)
+    // Función de comparación flexible: true si el tag está en la frase o viceversa
+    const match = (tagExcel, fraseVoz) => {
+        if (!tagExcel || !fraseVoz) return false;
+        const tag = String(tagExcel).toLowerCase().trim();
+        const frase = String(fraseVoz).toLowerCase().trim();
+        return frase.includes(tag) || tag.includes(frase);
+    };
+
+    // 1. Caso BICI (Columna 2 -> índice 1)
     if (q.includes("bici")) {
-        const searchTerm = q.replace("bici", "").trim();
         db.bici.forEach(fila => {
-            if (String(fila[1]).toLowerCase().includes(searchTerm)) {
-                const urlRuta = String(fila[5] || "").trim();
-                if(urlRuta.startsWith('http')) window.open(urlRuta, '_blank');
-                found = true;
+            if (match(fila[1], q)) {
+                const url = String(fila[5] || "").trim();
+                if(url.startsWith('http')) { window.open(url, '_blank'); found = true; }
             }
         });
     } 
-    // Regla 2: Si dice "paseo", busca en sheet Paseo, columna 7 (índice 6)
+    // 2. Caso PASEO (Columna 7 -> índice 6)
     else if (q.includes("paseo")) {
-        const searchTerm = q.replace("paseo", "").trim();
         db.paseo.forEach(fila => {
-            if (String(fila[6]).toLowerCase().includes(searchTerm)) {
-                found = { f: fila, tipo: 'paseo' };
-            }
+            if (match(fila[6], q)) found = { f: fila, tipo: 'paseo' };
         });
     } 
-    // Regla 3: En cualquier otro caso, busca en sheet POIs, columna 10 (índice 9)
+    // 3. Caso RESTO / POIS (Columna 10 -> índice 9)
     else {
         db.pois.forEach(fila => {
-            if (String(fila[9]).toLowerCase().includes(q)) {
-                found = { f: fila, tipo: 'pois' };
-            }
+            if (match(fila[9], q)) found = { f: fila, tipo: 'pois' };
         });
     }
 

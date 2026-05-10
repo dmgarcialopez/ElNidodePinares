@@ -32,13 +32,20 @@ function showMap(tipo) {
     let markerCoords = [];
 
     db[tipo].forEach(fila => {
-        let lat, lng, latCoche, lngCoche;
+        let lat, lng, latCoche, lngCoche, urlPrincipal;
+        
         if (tipo === 'pois') { 
-            lat = parseNum(fila[4]); lng = parseNum(fila[5]);
+            lat = parseNum(fila[4]); 
+            lng = parseNum(fila[5]);
             latCoche = lat; lngCoche = lng;
+            urlPrincipal = String(fila[1] || "").trim(); // Columna 2 para POIs
         } else if (tipo === 'paseo') {
-            lat = parseNum(fila[2]); lng = parseNum(fila[3]);
-            latCoche = parseNum(fila[4]); lngCoche = parseNum(fila[5]);
+            lat = parseNum(fila[2]); 
+            lng = parseNum(fila[3]);
+            latCoche = parseNum(fila[4]); 
+            lngCoche = parseNum(fila[5]);
+            // CAMBIO SOLICITADO: Usar Columna 8 (índice 7) para Paseos
+            urlPrincipal = String(fila[7] || "").trim(); 
         }
 
         if (lat && lng) {
@@ -47,25 +54,23 @@ function showMap(tipo) {
 
             const container = document.createElement('div');
             container.style.textAlign = "center";
-            const urlBlog = String(fila[1] || "").trim();
             const urlVideo = String(fila[8] || "").trim();
 
             const title = document.createElement('div');
             title.innerHTML = `<b style="color:#2e7d32; font-size:16px; display:block; margin-bottom:12px; cursor:pointer; text-decoration:underline;">${fila[0]}</b>`;
-            title.onclick = () => { if(urlBlog.startsWith('http')) window.location.href = urlBlog; };
+            title.onclick = () => { if(urlPrincipal.startsWith('http')) window.open(urlPrincipal, '_blank'); };
             container.appendChild(title);
 
             const actions = document.createElement('div');
             actions.style.display = "flex"; actions.style.justifyContent = "center"; actions.style.gap = "15px";
 
-            // CORRECCIÓN CLAVE: Usamos Maps Dir para forzar navegación y evitar MyMaps
             const botones = [
                 { 
                     img: 'coche.png', 
                     show: (latCoche && lngCoche), 
                     fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}&travelmode=driving`, '_blank') 
                 },
-                { img: 'compartir.png', show: urlBlog.startsWith('http'), fn: () => shareContent(fila[0], urlBlog) },
+                { img: 'compartir.png', show: urlPrincipal.startsWith('http'), fn: () => shareContent(fila[0], urlPrincipal) },
                 { img: 'video.png', show: urlVideo.startsWith('http'), fn: () => window.open(urlVideo, '_blank') }
             ];
 

@@ -101,84 +101,90 @@ function showBiciList() {
     });
 }
 
-// --- LÓGICA DE VOZ Y BÚSQUEDA ---
+// --- LÓGICA DE VOZ ---
 function startVoiceSearch() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-ES';
     const status = document.getElementById('mic-status');
+    
     recognition.onstart = () => { status.innerText = "Escuchando..."; };
     recognition.onresult = (event) => {
         const text = event.results[0][0].transcript.toLowerCase();
-        status.innerText = 'Buscando: "' + text + '"';
+        status.innerText = ""; 
         processSearch(text);
     };
     recognition.onerror = () => { status.innerText = ""; };
+    recognition.onend = () => { if(status.innerText === "Escuchando...") status.innerText = ""; };
     recognition.start();
 }
 
 function processSearch(query) {
     let found = null;
     const q = query.toLowerCase().trim();
+    const status = document.getElementById('mic-status');
 
-    // 1. Prioridad BICI
+    // BUSCADOR CON STOP INMEDIATO
     if (q.includes("bici")) {
+        // Buscamos solo en Bici
         for (let fila of db.bici) {
-            let tagExcel = String(fila[1] || "").toLowerCase().trim();
-            if (tagExcel !== "" && q.includes(tagExcel)) {
+            let tag = String(fila[1] || "").toLowerCase().trim();
+            if (tag !== "" && q.includes(tag)) {
                 const url = String(fila[5] || "").trim();
                 if(url.startsWith('http')) window.open(url, '_blank');
-                found = true;
-                break; // Paramos en el primero que coincida
+                found = true; 
+                break; // Detener bucle de filas
             }
         }
     } 
-    // 2. Prioridad PASEO
     else if (q.includes("paseo")) {
+        // Buscamos solo en Paseos
         for (let fila of db.paseo) {
-            let tagExcel = String(fila[6] || "").toLowerCase().trim();
-            if (tagExcel !== "" && q.includes(tagExcel)) {
+            let tag = String(fila[6] || "").toLowerCase().trim();
+            if (tag !== "" && q.includes(tag)) {
                 found = { f: fila, tipo: 'paseo' };
-                break;
+                break; // Detener bucle de filas
             }
         }
     } 
-    // 3. Prioridad POIS (Resto de casos)
     else {
+        // Buscamos solo en POIs
         for (let fila of db.pois) {
-            let tagExcel = String(fila[9] || "").toLowerCase().trim();
-            if (tagExcel !== "" && q.includes(tagExcel)) {
+            let tag = String(fila[9] || "").toLowerCase().trim();
+            if (tag !== "" && q.includes(tag)) {
                 found = { f: fila, tipo: 'pois' };
-                break;
+                break; // Detener bucle de filas
             }
         }
     }
 
-    // Ejecutar acción si hubo match
+    // Una vez terminados los bucles, si encontramos algo, lo mostramos
     if (found && found !== true) {
         showMap(found.tipo);
         setTimeout(() => {
             let lat, lng;
             if (found.tipo === 'pois') { lat = parseNum(found.f[4]); lng = parseNum(found.f[5]); }
             else { lat = parseNum(found.f[2]); lng = parseNum(found.f[3]); }
+            
             if (lat && lng) {
                 map.setView([lat, lng], 18);
                 map.eachLayer(layer => {
                     if (layer instanceof L.Marker && layer.getLatLng().lat === lat) layer.openPopup();
                 });
             }
-        }, 600);
+        }, 400);
     } else if (!found) {
-        document.getElementById('mic-status').innerText = "Sin resultados";
-        setTimeout(() => { document.getElementById('mic-status').innerText = ""; }, 3000);
+        status.innerText = "No se ha encontrado";
+        setTimeout(() => { status.innerText = ""; }, 2000);
     }
 }
 
 function goHome() {
     document.getElementById('view-screen').classList.add('hidden');
     document.getElementById('home-screen').classList.remove('hidden');
-    if(document.getElementById('mic-status')) document.getElementById('mic-status').innerText = "";
+    const status = document.getElementById('mic-status');
+    if(status) status.innerText = "";
 }
 
 async function shareContent(titulo, url) {

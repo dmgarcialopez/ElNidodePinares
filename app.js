@@ -7,50 +7,53 @@ const URLS = {
 let db = { pois: [], bici: [], paseo: [] };
 let map = null;
 
+// Carga de datos inicial
 window.onload = async () => {
     for (let key in URLS) {
         Papa.parse(URLS[key], {
-            download: true,
-            header: false,
-            skipEmptyLines: true,
-            complete: (results) => {
-                db[key] = results.data.slice(1);
-            }
+            download: true, header: false, skipEmptyLines: true,
+            complete: (results) => { db[key] = results.data.slice(1); }
         });
     }
 };
 
+// --- CONTROL DE GESTO ATRÁS (MÓVIL) ---
+window.onpopstate = function(event) {
+    goHome();
+};
+
+// --- FUNCIÓN MOSTRAR MAPA (POIS Y PASEOS) ---
 function showMap(tipo) {
+    history.pushState({ screen: 'view' }, ''); // Registra estado para el botón atrás
+
     document.getElementById('home-screen').classList.add('hidden');
     document.getElementById('view-screen').classList.remove('hidden');
     document.getElementById('list-container').classList.add('hidden');
     document.getElementById('map-container').classList.remove('hidden');
 
     if (map) map.remove();
-    
-    map = L.map('map-container').setView([41.838, -3.004], 14);
+    map = L.map('map-container');
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    let markerCoords = [];
 
     db[tipo].forEach(fila => {
         let lat, lng, latCoche, lngCoche;
-
         if (tipo === 'pois') { 
-            lat = parseNum(fila[4]); 
-            lng = parseNum(fila[5]);
+            lat = parseNum(fila[4]); lng = parseNum(fila[5]);
             latCoche = lat; lngCoche = lng;
         } else if (tipo === 'paseo') {
-            lat = parseNum(fila[2]); 
-            lng = parseNum(fila[3]);
-            latCoche = parseNum(fila[4]);
-            lngCoche = parseNum(fila[5]);
+            lat = parseNum(fila[2]); lng = parseNum(fila[3]);
+            latCoche = parseNum(fila[4]); lngCoche = parseNum(fila[5]);
         }
 
         if (lat && lng) {
             const m = L.marker([lat, lng]).addTo(map);
+            markerCoords.push([lat, lng]);
+
             const container = document.createElement('div');
             container.style.textAlign = "center";
             container.style.minWidth = "165px";
-
             const urlBlog = String(fila[1] || "").trim();
             const urlVideo = String(fila[8] || "").trim();
 
@@ -60,26 +63,12 @@ function showMap(tipo) {
             container.appendChild(title);
 
             const actions = document.createElement('div');
-            actions.style.display = "flex";
-            actions.style.justifyContent = "center";
-            actions.style.gap = "15px";
+            actions.style.display = "flex"; actions.style.justifyContent = "center"; actions.style.gap = "15px";
 
             const botones = [
-                { 
-                    img: 'coche.png', 
-                    show: (latCoche && lngCoche), 
-                    fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}`, '_blank') 
-                },
-                { 
-                    img: 'compartir.png', 
-                    show: urlBlog.startsWith('http'), 
-                    fn: () => shareContent(fila[0], urlBlog)
-                },
-                { 
-                    img: 'video.png', 
-                    show: urlVideo.startsWith('http'), 
-                    fn: () => window.open(urlVideo, '_blank') 
-                }
+                { img: 'coche.png', show: (latCoche && lngCoche), fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}`, '_blank') },
+                { img: 'compartir.png', show: urlBlog.startsWith('http'), fn: () => shareContent(fila[0], urlBlog) },
+                { img: 'video.png', show: urlVideo.startsWith('http'), fn: () => window.open(urlVideo, '_blank') }
             ];
 
             botones.forEach(b => {
@@ -91,30 +80,23 @@ function showMap(tipo) {
                     actions.appendChild(icon);
                 }
             });
-
             container.appendChild(actions);
             m.bindPopup(container);
         }
     });
-}
 
-// Función genérica para compartir (ahora se usa en mapa y en lista)
-async function shareContent(titulo, url) {
-    if (navigator.share) {
-        try {
-            await navigator.share({ title: titulo, url: url });
-        } catch (err) { console.log("Compartir cancelado"); }
+    // Ajuste automático de zoom y centrado
+    if (markerCoords.length > 0) {
+        map.fitBounds(markerCoords, { padding: [50, 50] });
     } else {
-        const dummy = document.createElement('input');
-        document.body.appendChild(dummy);
-        dummy.value = url; dummy.select();
-        document.execCommand('copy');
-        document.body.removeChild(dummy);
-        alert("Enlace copiado al portapapeles");
+        map.setView([41.838, -3.004], 14);
     }
 }
 
+// --- FUNCIÓN MOSTRAR LISTA BICI ---
 function showBiciList() {
+    history.pushState({ screen: 'view' }, ''); // También registra estado aquí
+
     document.getElementById('home-screen').classList.add('hidden');
     document.getElementById('view-screen').classList.remove('hidden');
     document.getElementById('map-container').classList.add('hidden');
@@ -126,49 +108,72 @@ function showBiciList() {
     db.bici.forEach(fila => {
         const div = document.createElement('div');
         div.className = 'lista-item';
-        // Ajuste de estilo para que el icono y el texto convivan
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.justifyContent = "flex-start";
-        div.style.padding = "10px 15px";
+        div.style.display = "flex"; div.style.alignItems = "center"; div.style.padding = "10px 15px";
+        
+        const urlRuta = String(fila[5] || "").trim();
 
-        const urlRuta = String(fila[5] || "").trim(); // Columna 6 (Índice 5)
-
-        // 1. Icono de compartir
         const shareBtn = document.createElement('img');
         shareBtn.src = 'icons/compartir.png';
-        shareBtn.style.width = "28px";
-        shareBtn.style.marginRight = "15px";
-        shareBtn.style.cursor = "pointer";
-        shareBtn.onclick = (e) => {
-            e.stopPropagation(); // Evita que al pulsar compartir se abra la ruta
-            if(urlRuta.startsWith('http')) shareContent(fila[0], urlRuta);
-        };
+        shareBtn.style.width = "28px"; shareBtn.style.marginRight = "15px";
+        shareBtn.onclick = (e) => { e.stopPropagation(); if(urlRuta.startsWith('http')) shareContent(fila[0], urlRuta); };
 
-        // 2. Nombre de la ruta
         const nameSpan = document.createElement('span');
-        nameSpan.style.flexGrow = "1";
-        nameSpan.style.textAlign = "left";
-        nameSpan.innerHTML = fila[0];
+        nameSpan.style.flexGrow = "1"; nameSpan.innerHTML = fila[0];
 
         div.appendChild(shareBtn);
         div.appendChild(nameSpan);
-        
-        div.onclick = () => {
-            if (urlRuta.startsWith('http')) {
-                window.open(urlRuta, '_blank');
-            } else {
-                alert("Ruta no disponible actualmente");
-            }
-        };
-        
+        div.onclick = () => { if(urlRuta.startsWith('http')) window.open(urlRuta, '_blank'); };
         list.appendChild(div);
     });
 }
 
+// --- BÚSQUEDA POR VOZ ---
+function startVoiceSearch() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { alert("Micro no compatible"); return; }
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    const status = document.getElementById('mic-status');
+    
+    recognition.onstart = () => { status.innerText = "Escuchando..."; };
+    recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript.toLowerCase();
+        status.innerText = 'Buscando: "' + text + '"';
+        processSearch(text);
+    };
+    recognition.onerror = () => { status.innerText = ""; };
+    recognition.start();
+}
+
+function processSearch(query) {
+    let found = null;
+    db.pois.forEach(f => { if(f[0].toLowerCase().includes(query)) found = {f, tipo:'pois'}; });
+    if(!found) db.paseo.forEach(f => { if(f[0].toLowerCase().includes(query)) found = {f, tipo:'paseo'}; });
+
+    if (found) {
+        showMap(found.tipo);
+        setTimeout(() => {
+            let lat = parseNum(found.tipo === 'pois' ? found.f[4] : found.f[2]);
+            let lng = parseNum(found.tipo === 'pois' ? found.f[5] : found.f[3]);
+            if(lat && lng) map.setView([lat, lng], 17);
+        }, 600);
+    } else {
+        document.getElementById('mic-status').innerText = "Sin resultados";
+    }
+}
+
+// --- UTILIDADES ---
 function goHome() {
+    if(document.getElementById('mic-status')) document.getElementById('mic-status').innerText = "";
     document.getElementById('view-screen').classList.add('hidden');
     document.getElementById('home-screen').classList.remove('hidden');
+}
+
+async function shareContent(titulo, url) {
+    if (navigator.share) {
+        try { await navigator.share({ title: titulo, url: url }); } catch (e) {}
+    } else { alert("Enlace: " + url); }
 }
 
 function parseNum(v) {

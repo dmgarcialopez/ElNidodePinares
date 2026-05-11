@@ -120,28 +120,54 @@ function showList(tipo, colNombre, colUrl, colTrack, colLat, colLng) {
     list.innerHTML = html;
 }
 
-function shareTrack(fileName, rutaNombre) {
+async function shareTrack(fileName, rutaNombre) {
     const clean = fileName ? fileName.trim() : "";
     if (!clean) return;
     
-    // Construimos la URL completa al archivo en GitHub
-    const fileUrl = window.location.origin + window.location.pathname.replace('index.html', '') + `tracks/${clean}`;
+    // URL cruda (raw) del archivo en GitHub
+    const fileUrl = `tracks/${clean}`;
 
-    // PLAN A: Intentar compartir la URL del archivo (en lugar del archivo físico)
-    // Esto evita el error de "Permission Denied" porque compartimos un texto (link), no un objeto binario.
-    if (navigator.share) {
-        navigator.share({
-            title: 'Track: ' + rutaNombre,
-            text: 'Descarga el track para: ' + rutaNombre,
-            url: fileUrl
-        }).catch(() => {
-            // PLAN B: Si el usuario cancela o falla, forzamos la descarga directa
-            ejecutarDescarga(fileUrl, clean);
-        });
-    } else {
-        // PLAN C: Para PC o navegadores sin compartir
-        ejecutarDescarga(fileUrl, clean);
+    try {
+        const response = await fetch(fileUrl);
+        if (!response.ok) throw new Error("Archivo no encontrado");
+        const blob = await response.blob();
+
+        // PASO 1: Intentar compartir el ARCHIVO REAL (Para que aparezca GPX Viewer)
+        // Usamos el MIME type genérico que menos problemas da
+        const file = new File([blob], clean, { type: 'application/octet-stream' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                files: [file],
+                title: rutaNombre
+            });
+        } else {
+            // PASO 2: Si el navegador bloquea el compartido, FORZAMOS la descarga
+            // Al descargarse, el móvil notificará "Archivo descargado"
+            // Cuando el usuario pulse esa notificación, SÍ aparecerán solo las apps de mapas
+            lanzarDescarga(blob, clean);
+        }
+    } catch (e) {
+        // Si todo falla, intentamos la descarga directa por enlace
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        a.download = clean;
+        a.click();
     }
+}
+
+function lanzarDescarga(blob, name) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }, 100);
 }
 
 // Función auxiliar para descargar

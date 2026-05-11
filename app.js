@@ -124,37 +124,34 @@ async function shareTrack(fileName, rutaNombre) {
     const clean = fileName ? fileName.trim() : "";
     if (!clean) return;
     
-    const filePath = `tracks/${clean}`;
-
     try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error("No se encuentra el archivo en el servidor");
-        
+        const response = await fetch(`tracks/${clean}`);
+        if (!response.ok) throw new Error("Fichero no encontrado");
         const blob = await response.blob();
-        
-        // Creamos el archivo para compartir
-        // Usamos 'application/octet-stream' para que el móvil no lo bloquee por tipo
-        const file = new File([blob], clean, { type: 'application/octet-stream' });
 
-        // Verificamos si el navegador permite compartir ARCHIVOS
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-                files: [file],
-                title: 'Ruta: ' + rutaNombre,
-                text: 'Te envío el track de la ruta ' + rutaNombre
-            });
-        } else {
-            // Si el navegador no permite compartir archivos (como en PC o navegadores antiguos)
-            // Simplemente descargamos el archivo para que el usuario lo abra manualmente
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = clean;
-            a.click();
-            console.log("Navegador no compatible con compartido de archivos, descargando...");
+        // 1. Intentamos el menú de compartir nativo (Solo móviles HTTPS)
+        if (navigator.share && navigator.canShare) {
+            const file = new File([blob], clean, { type: 'application/octet-stream' });
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    files: [file],
+                    title: rutaNombre
+                });
+                return; // Si tiene éxito, salimos aquí
+            }
         }
+
+        // 2. Si falla lo anterior (o es un PC), forzamos la descarga
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = clean;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
     } catch (e) {
-        console.error("Error al compartir:", e);
-        alert("No se ha podido compartir el archivo. Es posible que el nombre en la Sheet no coincida exactamente con el fichero en la carpeta /tracks/");
+        alert("Error: " + e.message + "\nArchivo: " + clean);
     }
 }
 

@@ -8,6 +8,7 @@ let db = { pois: [], bici: [], paseo: [] };
 let map = null;
 
 window.onload = async () => {
+    window.history.replaceState({ screen: 'home' }, '');
     for (let key in URLS) {
         Papa.parse(URLS[key], {
             download: true, header: false, skipEmptyLines: true,
@@ -16,185 +17,158 @@ window.onload = async () => {
     }
 };
 
-window.onpopstate = function() { goHome(); };
+window.onpopstate = function(event) {
+    if (event.state && event.state.screen === 'home') {
+        document.getElementById('view-screen').classList.add('hidden');
+        document.getElementById('home-screen').classList.remove('hidden');
+    }
+};
 
-// --- VISUALIZACIÓN ---
 function showMap(tipo) {
-    history.pushState({ screen: 'view' }, '');
+    window.history.pushState({ screen: 'mapa' }, '');
     document.getElementById('home-screen').classList.add('hidden');
     document.getElementById('view-screen').classList.remove('hidden');
-    document.getElementById('list-container').classList.add('hidden');
     document.getElementById('map-container').classList.remove('hidden');
+    document.getElementById('list-container').classList.add('hidden');
 
-    if (map) map.remove();
-    map = L.map('map-container');
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const centro = [41.854035, -2.933603];
+    const zoomInicial = 10;
 
-    let markerCoords = [];
-    db[tipo].forEach(fila => {
-        let lat, lng, latCoche, lngCoche, urlPrincipal;
-        if (tipo === 'pois') { 
-            lat = parseNum(fila[4]); lng = parseNum(fila[5]);
-            latCoche = lat; lngCoche = lng;
-            urlPrincipal = String(fila[1] || "").trim();
-        } else if (tipo === 'paseo') {
-            lat = parseNum(fila[2]); lng = parseNum(fila[3]);
-            latCoche = parseNum(fila[4]); lngCoche = parseNum(fila[5]);
-            urlPrincipal = String(fila[7] || "").trim(); 
-        }
+    if (!map) {
+        map = L.map('map-container').setView(centro, zoomInicial);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    } else {
+        map.setView(centro, zoomInicial);
+        map.eachLayer(layer => { if (layer instanceof L.Marker) map.removeLayer(layer); });
+    }
 
-        if (lat && lng) {
-            const m = L.marker([lat, lng]).addTo(map);
-            markerCoords.push([lat, lng]);
-            const container = document.createElement('div');
-            container.style.textAlign = "center";
-            const urlVideo = String(fila[8] || "").trim();
-            const title = document.createElement('div');
-            title.innerHTML = `<b style="color:#2e7d32; font-size:16px; display:block; margin-bottom:12px; cursor:pointer; text-decoration:underline;">${fila[0]}</b>`;
-            title.onclick = () => { if(urlPrincipal.startsWith('http')) window.open(urlPrincipal, '_blank'); };
-            container.appendChild(title);
-            const actions = document.createElement('div');
-            actions.style.display = "flex"; actions.style.justifyContent = "center"; actions.style.gap = "15px";
-            const botones = [
-                { img: 'coche.png', show: (latCoche && lngCoche), fn: () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${latCoche},${lngCoche}&travelmode=driving`, '_blank') },
-                { img: 'compartir.png', show: urlPrincipal.startsWith('http'), fn: () => shareContent(fila[0], urlPrincipal) },
-                { img: 'video.png', show: urlVideo.startsWith('http'), fn: () => window.open(urlVideo, '_blank') }
-            ];
-            botones.forEach(b => {
-                if (b.show) {
-                    const icon = document.createElement('img');
-                    icon.src = `icons/${b.img}`;
-                    icon.style.width = "32px"; icon.style.cursor = "pointer";
-                    icon.onclick = (e) => { e.stopPropagation(); b.fn(); };
-                    actions.appendChild(icon);
-                }
-            });
-            container.appendChild(actions);
-            m.bindPopup(container);
+    db[tipo].forEach((f, index) => {
+        const nombre = f[0];
+        const blogUrl = f[1];
+        // El tag f[9] ya no se usa aquí para que no aparezca en pantalla
+        const lat = parseFloat(f[4]); 
+        const lng = parseFloat(f[5]);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const popup = `
+                <div style="text-align:center; color:#333; min-width:140px; padding:5px;">
+                    <a href="${blogUrl}" target="_blank" style="text-decoration:underline; color:#1b5e20; font-size:16px; font-weight:bold; display:block; margin-bottom:12px;">
+                        ${nombre}
+                    </a>
+                    
+                    <div style="display:flex; justify-content:center; gap:20px;">
+                        <button onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}', '_blank')" 
+                                style="background:none; border:none; cursor:pointer; width:42px; padding:0;">
+                            <img src="icons/coche.png" style="width:100%; height:auto;" alt="Llegar">
+                        </button>
+
+                        ${blogUrl ? `
+                        <button onclick="shareContent('${nombre}', '${blogUrl}')" 
+                                style="background:none; border:none; cursor:pointer; width:42px; padding:0;">
+                            <img src="icons/compartir.png" style="width:100%; height:auto;" alt="Compartir">
+                        </button>` : ''}
+                    </div>
+                </div>`;
+            
+            L.marker([lat, lng]).addTo(map).bindPopup(popup);
         }
     });
-    if (markerCoords.length > 0) map.fitBounds(markerCoords, { padding: [50, 50] });
 }
 
-function showBiciList() {
-    history.pushState({ screen: 'view' }, '');
+function showList(tipo, colNombre, colUrl, colTrack, colLat, colLng) {
+    if (!db[tipo] || db[tipo].length === 0) return;
+    window.history.pushState({ screen: 'lista' }, '');
     document.getElementById('home-screen').classList.add('hidden');
     document.getElementById('view-screen').classList.remove('hidden');
     document.getElementById('map-container').classList.add('hidden');
     const list = document.getElementById('list-container');
     list.classList.remove('hidden');
-    list.innerHTML = `<h2 style="color:white; text-align:center; margin-bottom:20px;">Rutas BTT</h2>`;
-    db.bici.forEach(fila => {
-        const div = document.createElement('div');
-        div.className = 'lista-item';
-        div.style.display = "flex"; div.style.alignItems = "center"; div.style.padding = "10px 15px";
-        const urlRuta = String(fila[5] || "").trim();
-        const shareBtn = document.createElement('img');
-        shareBtn.src = 'icons/compartir.png';
-        shareBtn.style.width = "28px"; shareBtn.style.marginRight = "15px";
-        shareBtn.onclick = (e) => { e.stopPropagation(); if(urlRuta.startsWith('http')) shareContent(fila[0], urlRuta); };
-        const nameSpan = document.createElement('span');
-        nameSpan.style.flexGrow = "1"; nameSpan.innerHTML = fila[0];
-        div.appendChild(shareBtn); div.appendChild(nameSpan);
-        div.onclick = () => { if(urlRuta.startsWith('http')) window.open(urlRuta, '_blank'); };
-        list.appendChild(div);
-    });
-}
 
-// --- LÓGICA DE VOZ ---
-function startVoiceSearch() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES';
-    const status = document.getElementById('mic-status');
+    const titulo = tipo === 'bici' ? 'Rutas en Bici' : 'Rutas de Paseo';
+    let html = `<h2 class="lista-titulo">${titulo}</h2>`;
     
-    recognition.onstart = () => { status.innerText = "Escuchando..."; };
-    recognition.onresult = (event) => {
-        const text = event.results[0][0].transcript.toLowerCase();
-        status.innerText = ""; 
-        processSearch(text);
-    };
-    recognition.onerror = () => { status.innerText = ""; };
-    recognition.onend = () => { if(status.innerText === "Escuchando...") status.innerText = ""; };
-    recognition.start();
+    html += db[tipo].map(f => {
+        const nombre = f[colNombre];
+        const url = f[colUrl];
+        const trackFile = f[colTrack];
+        const lat = f[colLat];
+        const lng = f[colLng];
+
+        // Construcción de botones condicionales
+        let btnCoche = (lat && lng) ? `
+            <button class="btn-accion" onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}', '_blank')">
+                <img src="icons/coche.png">
+            </button>` : '';
+
+        return `
+            <div class="lista-item">
+                <div class="lista-acciones-left">
+                    ${btnCoche}
+                    <button class="btn-accion" onclick="shareTrack('${trackFile}', '${nombre}')">
+                        <img src="icons/ruta.png">
+                    </button>
+                    <button class="btn-accion" onclick="shareContent('${nombre}', '${url}')">
+                        <img src="icons/compartir.png">
+                    </button>
+                </div>
+                <div class="lista-info" onclick="window.open('${url}', '_blank')">
+                    <span class="nombre-ruta">${nombre}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    list.innerHTML = html;
 }
 
-function processSearch(query) {
-    let found = null;
-    const q = query.toLowerCase().trim();
-    const status = document.getElementById('mic-status');
+async function shareTrack(fileName, rutaNombre) {
+    const cleanFileName = fileName ? fileName.trim() : "";
+    if (!cleanFileName) return alert("No hay archivo asignado");
+    const filePath = `tracks/${cleanFileName}`;
+    try {
+        const response = await fetch(filePath);
+        if(!response.ok) throw new Error("Archivo no encontrado en /tracks/");
+        const blob = await response.blob();
+        const file = new File([blob], cleanFileName, { type: 'application/vnd.google-earth.kml+xml' });
 
-    // BUSCADOR CON STOP INMEDIATO
-    if (q.includes("bici")) {
-        // Buscamos solo en Bici
-        for (let fila of db.bici) {
-            let tag = String(fila[1] || "").toLowerCase().trim();
-            if (tag !== "" && q.includes(tag)) {
-                const url = String(fila[5] || "").trim();
-                if(url.startsWith('http')) window.open(url, '_blank');
-                found = true; 
-                break; // Detener bucle de filas
-            }
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: `Ruta: ${rutaNombre}` });
+        } else {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = cleanFileName;
+            link.click();
         }
-    } 
-    else if (q.includes("paseo")) {
-        // Buscamos solo en Paseos
-        for (let fila of db.paseo) {
-            let tag = String(fila[6] || "").toLowerCase().trim();
-            if (tag !== "" && q.includes(tag)) {
-                found = { f: fila, tipo: 'paseo' };
-                break; // Detener bucle de filas
-            }
-        }
-    } 
-    else {
-        // Buscamos solo en POIs
-        for (let fila of db.pois) {
-            let tag = String(fila[9] || "").toLowerCase().trim();
-            if (tag !== "" && q.includes(tag)) {
-                found = { f: fila, tipo: 'pois' };
-                break; // Detener bucle de filas
-            }
-        }
-    }
-
-    // Una vez terminados los bucles, si encontramos algo, lo mostramos
-    if (found && found !== true) {
-        showMap(found.tipo);
-        setTimeout(() => {
-            let lat, lng;
-            if (found.tipo === 'pois') { lat = parseNum(found.f[4]); lng = parseNum(found.f[5]); }
-            else { lat = parseNum(found.f[2]); lng = parseNum(found.f[3]); }
-            
-            if (lat && lng) {
-                map.setView([lat, lng], 18);
-                map.eachLayer(layer => {
-                    if (layer instanceof L.Marker && layer.getLatLng().lat === lat) layer.openPopup();
-                });
-            }
-        }, 400);
-    } else if (!found) {
-        status.innerText = "No se ha encontrado";
-        setTimeout(() => { status.innerText = ""; }, 2000);
-    }
-}
-
-function goHome() {
-    document.getElementById('view-screen').classList.add('hidden');
-    document.getElementById('home-screen').classList.remove('hidden');
-    const status = document.getElementById('mic-status');
-    if(status) status.innerText = "";
+    } catch (e) { alert("Error: " + e.message); }
 }
 
 async function shareContent(titulo, url) {
     if (navigator.share) {
-        try { await navigator.share({ title: titulo, text: 'Ruta: ' + titulo, url: url }); } catch (e) {}
+        try { await navigator.share({ title: titulo, url: url }); } catch (e) {}
     } else { alert("Enlace: " + url); }
 }
 
-function parseNum(v) {
-    if(!v) return null;
-    let n = parseFloat(String(v).replace(',', '.').trim());
-    return isNaN(n) ? null : n;
+function startVoiceSearch() {
+    const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Speech) return;
+    const rec = new Speech();
+    const status = document.getElementById('mic-status');
+    rec.onstart = () => status.innerText = "Escuchando...";
+    rec.onresult = (e) => {
+        const text = e.results[0][0].transcript.toLowerCase();
+        status.innerText = 'Buscando: ' + text;
+        ejecutarBusqueda(text);
+    };
+    rec.onend = () => setTimeout(() => status.innerText = "", 2000);
+    rec.start();
+}
+
+function ejecutarBusqueda(query) {
+    for (let key in db) {
+        let item = db[key].find(f => f.some(c => c && c.toLowerCase().includes(query)));
+        if (item) {
+            if (key === 'pois') showMap(key);
+            else showList(key, 0, 4, 5, 6, 7); // Ajusta índices por defecto si es necesario
+            return;
+        }
+    }
 }

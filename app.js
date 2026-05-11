@@ -120,39 +120,39 @@ function showList(tipo, colNombre, colUrl, colTrack, colLat, colLng) {
     list.innerHTML = html;
 }
 
-async function shareTrack(fileName, rutaNombre) {
+function shareTrack(fileName, rutaNombre) {
     const clean = fileName ? fileName.trim() : "";
     if (!clean) return;
     
-    try {
-        const response = await fetch(`tracks/${clean}`);
-        if (!response.ok) throw new Error("Fichero no encontrado");
-        const blob = await response.blob();
+    // Construimos la URL completa al archivo en GitHub
+    const fileUrl = window.location.origin + window.location.pathname.replace('index.html', '') + `tracks/${clean}`;
 
-        // 1. Intentamos el menú de compartir nativo (Solo móviles HTTPS)
-        if (navigator.share && navigator.canShare) {
-            const file = new File([blob], clean, { type: 'application/octet-stream' });
-            if (navigator.canShare({ files: [file] })) {
-                await navigator.share({
-                    files: [file],
-                    title: rutaNombre
-                });
-                return; // Si tiene éxito, salimos aquí
-            }
-        }
-
-        // 2. Si falla lo anterior (o es un PC), forzamos la descarga
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = clean;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        
-    } catch (e) {
-        alert("Error: " + e.message + "\nArchivo: " + clean);
+    // PLAN A: Intentar compartir la URL del archivo (en lugar del archivo físico)
+    // Esto evita el error de "Permission Denied" porque compartimos un texto (link), no un objeto binario.
+    if (navigator.share) {
+        navigator.share({
+            title: 'Track: ' + rutaNombre,
+            text: 'Descarga el track para: ' + rutaNombre,
+            url: fileUrl
+        }).catch(() => {
+            // PLAN B: Si el usuario cancela o falla, forzamos la descarga directa
+            ejecutarDescarga(fileUrl, clean);
+        });
+    } else {
+        // PLAN C: Para PC o navegadores sin compartir
+        ejecutarDescarga(fileUrl, clean);
     }
+}
+
+// Función auxiliar para descargar
+function ejecutarDescarga(url, name) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.target = '_blank'; // Ayuda en algunos navegadores móviles
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
 async function shareContent(titulo, url) {

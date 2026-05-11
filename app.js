@@ -32,40 +32,52 @@ function showMap(tipo) {
     document.getElementById('list-container').classList.add('hidden');
 
     const centro = [41.854035, -2.933603];
-    const zoomInicial = 10;
-
     if (!map) {
-        map = L.map('map-container').setView(centro, zoomInicial);
+        map = L.map('map-container').setView(centro, 11);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     } else {
-        map.setView(centro, zoomInicial);
+        map.setView(centro, 11);
         map.eachLayer(layer => { if (layer instanceof L.Marker) map.removeLayer(layer); });
     }
 
-    db[tipo].forEach((f, index) => {
+    db[tipo].forEach((f) => {
         const nombre = f[0];
         const blogUrl = f[1];
-        // El tag f[9] ya no se usa aquí para que no aparezca en pantalla
         const lat = parseFloat(f[4]); 
         const lng = parseFloat(f[5]);
+        const videoUrlOriginal = f[8]; // Columna I
 
         if (!isNaN(lat) && !isNaN(lng)) {
+            // Lógica para limpiar la URL de YouTube y que se vea "limpia"
+            let videoUrlFinal = videoUrlOriginal;
+            if (videoUrlOriginal && videoUrlOriginal.includes('youtube.com/watch?v=')) {
+                const videoId = videoUrlOriginal.split('v=')[1].split('&')[0];
+                videoUrlFinal = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+            } else if (videoUrlOriginal && videoUrlOriginal.includes('youtu.be/')) {
+                const videoId = videoUrlOriginal.split('youtu.be/')[1].split('?')[0];
+                videoUrlFinal = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+            }
+
             const popup = `
-                <div style="text-align:center; color:#333; min-width:140px; padding:5px;">
-                    <a href="${blogUrl}" target="_blank" style="text-decoration:underline; color:#1b5e20; font-size:16px; font-weight:bold; display:block; margin-bottom:12px;">
-                        ${nombre}
-                    </a>
+                <div style="text-align:center; color:#333; min-width:160px; padding:2px;">
+                    <a href="${blogUrl}" target="_blank" style="text-decoration:underline; color:#1b5e20; font-size:15px; font-weight:bold; display:block; margin-bottom:8px;">${nombre}</a>
                     
-                    <div style="display:flex; justify-content:center; gap:20px;">
+                    <div style="display:flex; justify-content:center; gap:10px;">
                         <button onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}', '_blank')" 
-                                style="background:none; border:none; cursor:pointer; width:42px; padding:0;">
-                            <img src="icons/coche.png" style="width:100%; height:auto;" alt="Llegar">
+                                style="background:none; border:none; cursor:pointer; width:38px; padding:0;">
+                            <img src="icons/coche.png" style="width:100%;" alt="Coche">
                         </button>
 
                         ${blogUrl ? `
                         <button onclick="shareContent('${nombre}', '${blogUrl}')" 
-                                style="background:none; border:none; cursor:pointer; width:42px; padding:0;">
-                            <img src="icons/compartir.png" style="width:100%; height:auto;" alt="Compartir">
+                                style="background:none; border:none; cursor:pointer; width:38px; padding:0;">
+                            <img src="icons/compartir.png" style="width:100%;" alt="Compartir">
+                        </button>` : ''}
+
+                        ${videoUrlOriginal && videoUrlOriginal.trim() !== "" ? `
+                        <button onclick="window.open('${videoUrlFinal}', '_blank')" 
+                                style="background:none; border:none; cursor:pointer; width:38px; padding:0;">
+                            <img src="icons/video.png" style="width:100%;" alt="Vídeo">
                         </button>` : ''}
                     </div>
                 </div>`;

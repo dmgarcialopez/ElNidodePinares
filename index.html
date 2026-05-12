@@ -39,13 +39,14 @@
                     <button onclick="showMap('pois')" class="btn-circle"><img src="icons/poi.png"></button>
                     <button onclick="showList('bici',0,5,6,null,null)" class="btn-circle"><img src="icons/bici.png"></button>
                     <button onclick="showList('paseo',0,7,8,4,5)" class="btn-circle"><img src="icons/walk.png"></button>
-                    <a href="https://www.elnidodepinares.es/actividades" class="btn-circle"><img src="icons/climb.png"></a>
-                    <a href="https://www.elnidodepinares.es" class="btn-circle"><img src="icons/logo-small.png"></a>
-                    <a href="https://www.elnidodepinares.es/nuestro-blog" class="btn-circle"><img src="icons/photos.png"></a>
+                    <a href="https://www.elnidodepinares.es/actividades/?utm_source=PWA" class="btn-circle"><img src="icons/climb.png"></a>
+                    <a href="https://www.elnidodepinares.es/?utm_source=PWA" class="btn-circle"><img src="icons/logo-small.png"></a>
+                    <a href="https://www.elnidodepinares.es/nuestro-blog/?utm_source=PWA" class="btn-circle"><img src="icons/photos.png"></a>
                 </div>
                 <div class="bloque-flex">
-                    <a href="https://www.elnidodepinares.es/hoteles" class="btn-circle"><img src="icons/hotel.png"></a>
-                    <a href="https://www.elnidodepinares.es/donde-comer" class="btn-circle"><img src="icons/food.png"></a>
+                    <a href="https://www.elnidodepinares.es/hoteles/?utm_source=PWA" class="btn-circle"><img src="icons/hotel.png"></a>
+                    <button onclick="showGame()" class="btn-circle"><img src="icons/BuscaDuendes.png"></button>
+                    <a href="https://www.elnidodepinares.es/donde-comer/?utm_source=PWA" class="btn-circle"><img src="icons/food.png"></a>
                 </div>
                 <div style="margin-top: 15px; text-align: center;">
                     <button onclick="startVoiceSearch()" class="btn-circle"><img src="icons/microfono.png"></button>
@@ -58,6 +59,33 @@
             <div id="map-container"></div>
             <div id="list-container" class="hidden"></div>
         </section>
+
+        <section id="game-screen" class="screen hidden">
+            <div id="game-header" style="display: flex; align-items: center; justify-content: center; gap: 30px; padding: 10px;">
+                <img id="current-duende-icon" src="icons/CapDuende.png" onclick="showCapturedAlbum()" style="cursor:pointer; width: 50px;">
+                <div style="text-align: center;">
+                    <div id="closest-info" style="color: white; font-weight: bold;">Buscando...</div>
+                    <div id="duende-name" style="color: #ffeb3b; font-size: 1.1em;">---</div>
+                </div>
+            </div>
+
+            <div id="game-map" style="width: 100%; height: 40%; border-bottom: 2px solid rgba(255,255,255,0.2);"></div>
+
+            <div id="game-controls">
+               <div id="video-container" style="width: 220px; height: 220px; margin: 15px auto; cursor: pointer; border-radius: 20px; overflow: hidden; border: 3px solid white; position: relative; background: #2e7d32;">
+                    <video id="game-video" autoplay muted loop playsinline style="position: absolute; top: 50%; left: 50%; min-width: 100%; min-height: 100%; transform: translate(-50%, -50%) scale(1.4); object-fit: cover;"></video>
+               </div>
+            </div>
+        </section>
+
+       <section id="album-screen" class="screen hidden" style="background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('icons/FondoDuendes.png'); background-size: cover; overflow-y: auto;">
+    <div id="album-header" style="text-align: center; padding: 25px 15px 10px;">
+        <h2 style="color: white; text-shadow: 2px 2px black; margin: 0; font-size: 24px;">Álbum de Capturas</h2>
+    </div>
+    <div id="album-content">
+        </div>
+</section>
+
     </div>
     <script src="app.js"></script>
 </body>

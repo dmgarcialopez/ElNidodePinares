@@ -18,6 +18,8 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-plugins@3.4.0/layer/vector/KML.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
 </head>
 <body>
@@ -36,17 +38,20 @@
             
             <div class="menu-principal">
                 <div class="bloque-grid">                    
-                    <button onclick="showMap('pois')" class="btn-circle"><img src="icons/poi.png"></button>
-                    <button onclick="showList('bici',0,5,6,null,null)" class="btn-circle"><img src="icons/bici.png"></button>
-                    <button onclick="showList('paseo',0,7,8,4,5)" class="btn-circle"><img src="icons/walk.png"></button>
+                   <button id="btn-pois" class="btn-circle"><img src="icons/poi.png"></button>
+                   <button id="btn-bici" class="btn-circle"><img src="icons/bici.png"></button>
+                   <button id="btn-walk" class="btn-circle"><img src="icons/walk.png"></button>
                     <a href="https://www.elnidodepinares.es/actividades/?utm_source=PWA" class="btn-circle"><img src="icons/climb.png"></a>
                     <a href="https://www.elnidodepinares.es/?utm_source=PWA" class="btn-circle"><img src="icons/logo-small.png"></a>
-                    <a href="https://www.elnidodepinares.es/nuestro-blog/?utm_source=PWA" class="btn-circle"><img src="icons/photos.png"></a>
+                    <a href="https://www.elnidodepinares.es/nuestro-blog/?utm_source=PWA" class="btn-circle"><img src="icons/photos.png"></a>                   
                 </div>
                 <div class="bloque-flex">
                     <a href="https://www.elnidodepinares.es/hoteles/?utm_source=PWA" class="btn-circle"><img src="icons/hotel.png"></a>
-                    <button onclick="showGame()" class="btn-circle"><img src="icons/BuscaDuendes.png"></button>
                     <a href="https://www.elnidodepinares.es/donde-comer/?utm_source=PWA" class="btn-circle"><img src="icons/food.png"></a>
+                </div>
+                <div class="bloque-flex">
+                    <button id="btn-game" class="btn-circle"><img src="icons/BuscaDuendes.png"></button>
+                    <button id="btn-nav" class="btn-circle"><img src="icons/Navegacion.png"></button>
                 </div>
                 <div style="margin-top: 15px; text-align: center;">
                     <button onclick="startVoiceSearch()" class="btn-circle"><img src="icons/microfono.png"></button>
@@ -62,7 +67,7 @@
 
         <section id="game-screen" class="screen hidden">
             <div id="game-header" style="display: flex; align-items: center; justify-content: center; gap: 30px; padding: 10px;">
-                <img id="current-duende-icon" src="icons/CapDuende.png" onclick="showCapturedAlbum()" style="cursor:pointer; width: 50px;">
+                <button id="btn-album" class="btn-circle"><img src="icons/CapDuende.png"></button>
                 <div style="text-align: center;">
                     <div id="closest-info" style="color: white; font-weight: bold;">Buscando...</div>
                     <div id="duende-name" style="color: #ffeb3b; font-size: 1.1em;">---</div>
@@ -79,14 +84,69 @@
         </section>
 
        <section id="album-screen" class="screen hidden" style="background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('icons/FondoDuendes.png'); background-size: cover; overflow-y: auto;">
-    <div id="album-header" style="text-align: center; padding: 25px 15px 10px;">
-        <h2 style="color: white; text-shadow: 2px 2px black; margin: 0; font-size: 24px;">Álbum de Capturas</h2>
-    </div>
-    <div id="album-content">
-        </div>
-</section>
+            <div id="album-header" style="text-align: center; padding: 25px 15px 10px;">
+               <h2 style="color: white; text-shadow: 2px 2px black; margin: 0; font-size: 24px;">Álbum de Capturas</h2>
+            </div>
+            <div id="album-content">
+            </div>
+       </section>
+       <section id="nav-screen" class="screen hidden">
+           <div id="nav-header" style="display: flex; align-items: center; justify-content: center; gap: 30px; padding: 10px;">
+              <div style="text-align: center;">
+                 <div id="track-name" style="color: white; font-weight: 900; font-size: 24px; padding: 10px; text-transform: uppercase; letter-spacing: 1px; font-family: sans-serif;">
+    Nombre del Track</div>
+              </div>
+           </div>
+
+           <div id="nav-map" style="width: 100%; height: 40%; border-bottom: 2px solid rgba(255,255,255,0.2);"></div>
+           <div class="bloque-flex" style="display: flex; justify-content: center; gap: 40px; margin-top: 30px; width: 100%;">        
+           <button id="btn-record" onclick="toggleRecording()" class="btn-circle"><img src="icons/NOREC.png" alt="REC"></button>              
+              <div class="dropdown">
+                 <button class="btn-circle" onclick="toggleMapMenu()"><img src="icons/Maplayer.png" alt="Capas"></button>
+                 <div id="map-selector" class="dropdown-content hidden">
+                 <button onclick="changeBaseLayer('osm')" style="width: 100%; padding: 20px; border: none; background: white; text-align: left; font-weight: bold; color: #1b5e20; font-size: 20px; border-bottom: 1px solid #eee; display: block;">
+                    Callejero</button>
+                
+                 <button onclick="changeBaseLayer('topo')" style="width: 100%; padding: 20px; border: none; background: white; text-align: left; font-weight: bold; color: #1b5e20; font-size: 20px; border-bottom: 1px solid #eee; display: block;">
+                    Montaña</button>
+                
+                 <button onclick="changeBaseLayer('sat')" style="width: 100%; padding: 20px; border: none; background: white; text-align: left; font-weight: bold; color: #1b5e20; font-size: 20px; display: block;">
+                    Satélite</button>
+                 </div>
+             </div>
+             <button onclick="finalizarYExportar()" class="btn-circle"><img src="icons/SaveFile.png" alt="Guardar GPX"></button>
+          </div> 
+    </section>
 
     </div>
-    <script src="app.js"></script>
+    <script type="module" src="js/app.js"></script>
+<div id="toast-aviso" class="hidden" style="position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: rgba(27, 94, 32, 0.9); color: white; padding: 12px 25px; border-radius: 25px; z-index: 10000; font-weight: bold; text-align: center; min-width: 200px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+    <span id="toast-text"></span>
+</div>
+
+<div id="custom-confirm" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 25px; border-radius: 20px; text-align: center; width: 85%; max-width: 320px; border: 4px solid #1b5e20;">
+        <p id="confirm-text" style="color: #333; font-weight: bold; margin-bottom: 25px; font-size: 1.1em; line-height: 1.4;"></p>
+        <div style="display: flex; justify-content: space-around; gap: 10px;">
+            <button id="confirm-no" style="background: #ccc; color: #333; border: none; padding: 12px 20px; border-radius: 12px; font-weight: bold; flex: 1;">CANCELAR</button>
+            <button id="confirm-si" style="background: #1b5e20; color: white; border: none; padding: 12px 20px; border-radius: 12px; font-weight: bold; flex: 1;">LIBERAR</button>
+        </div>
+    </div>
+</div>
+
+<div id="custom-prompt" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+    <div style="background: white; padding: 25px; border-radius: 20px; text-align: center; width: 85%; max-width: 320px; border: 4px solid #1b5e20;">
+        <p style="color: #333; font-weight: bold; margin-bottom: 15px; font-size: 1.1em;">Nombre de la ruta</p>
+        
+        <input type="text" id="prompt-input" style="width: 100%; padding: 12px; border-radius: 10px; border: 2px solid #ccc; margin-bottom: 20px; font-size: 16px; box-sizing: border-box; outline: none; text-align: center;">
+        
+        <div style="display: flex; justify-content: space-around; gap: 10px;">
+            <button id="prompt-cancel" style="background: #ccc; color: #333; border: none; padding: 12px 20px; border-radius: 12px; font-weight: bold; flex: 1;">CANCELAR</button>
+            <button id="prompt-save" style="background: #1b5e20; color: white; border: none; padding: 12px 20px; border-radius: 12px; font-weight: bold; flex: 1;">GUARDAR</button>
+        </div>
+    </div>
+</div>
+
+</div>
 </body>
 </html>

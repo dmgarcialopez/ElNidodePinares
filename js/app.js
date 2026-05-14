@@ -4,6 +4,11 @@ import * as Data from './data-service.js';
 import { state } from './state.js';
 import * as Nav from './nav-engine.js';
 
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(() => console.log("Service Worker de El Nido registrado con éxito"))
+    .catch(err => console.error("Error al registrar el SW", err));
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. LIMPIEZA DE HISTORIAL AL ARRANCAR

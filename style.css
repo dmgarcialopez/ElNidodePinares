@@ -14,11 +14,12 @@ body, html {
 /* --- 2. HEADER --- */
 header { padding: 25px 15px 15px; }
 .header-container { display: flex; align-items: center; justify-content: center; gap: 15px; }
-.logo { width: 65px; height: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); flex-shrink: 0; }
+.logo { width: 80px; height: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); flex-shrink: 0; }
 .header-text { display: flex; flex-direction: column; }
-h1 { font-size: 20px; margin: 0; text-shadow: 2px 2px 4px black; line-height: 1.1; text-align: center;}
-h3 { font-size: 14px; font-weight: bold; opacity: 0.9; margin: 2px 0; text-shadow: 1px 1px 2px black; text-align: center; }
-h4 { font-size: 14px; color: #aed581; text-shadow: 1px 1px 2px black; text-align: center; }
+h1 { font-size: 26px; font-weight: bold; margin: 0; text-shadow: 2px 2px 4px black; line-height: 1.1; text-align: center;}
+h2 { font-size: 20px; font-weight: bold; margin: 0; text-shadow: 2px 2px 4px black; line-height: 1.1; text-align: center;}
+h3 { font-size: 20px; color: #aed581; font-weight: bold; margin: 0; text-shadow: 2px 2px 4px black; line-height: 1.1; text-align: center;}
+h4 { font-size: 16px; color: #aed581; text-shadow: 1px 1px 2px black; text-align: center; }
 
 /* --- 3. MENU PRINCIPAL (Botones 75px) --- */
 .menu-principal { width: 100%; display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
@@ -95,7 +96,7 @@ h4 { font-size: 14px; color: #aed581; text-shadow: 1px 1px 2px black; text-align
     border: 3px solid #3e2723; /* Un marco marrón oscuro */
     border-radius: 15px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    background: #222;
+    background: #4e342e url('icons/wood.png') no-repeat center center fixed;
 }
 
 .nav-controls-wrapper {

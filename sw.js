@@ -122,7 +122,7 @@ const assets = [
 
 // Función para enviar mensajes a la ventana (UI)
 function enviarMensaje(texto) {
-    self.clients.matchAll().then(clients => {
+    self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
         clients.forEach(client => {
             client.postMessage({
                 type: 'TOAST',
@@ -160,18 +160,16 @@ self.addEventListener('install', event => {
 
 // EVENTO DE ACTIVACIÓN
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    Promise.all([
-      // Toma el control de todas las pestañas inmediatamente
-      self.clients.claim(), 
-      // Borra las cachés viejas (v1, etc.)
-      caches.keys().then(keys => {
-        return Promise.all(
-          keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-        );
-      })
-    ])
-  );
+    event.waitUntil(
+        Promise.all([
+            self.clients.claim(), // <--- ESTO ES VITAL: Toma el control de la web ya mismo
+            caches.keys().then(keys => {
+                return Promise.all(
+                    keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+                );
+            })
+        ])
+    );
 });
 
 // EVENTO FETCH (Mantén tu lógica de Google Sheets que es correcta)

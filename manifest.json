@@ -16,7 +16,7 @@
       "purpose": "any"
     }
   ],
-  "start_url": "https://app.elnidodepinares.es/",
+  "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#4a5d23",

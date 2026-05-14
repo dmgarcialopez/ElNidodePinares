@@ -1,20 +1,20 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'elnido-pinares-v1';
+const CACHE_NAME = 'elnido-pinares-v2';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/style.css',
-  '/js/app.js',
-  '/js/ui-manager.js', 
-  '/js/nav-engine.js',
-  '/js/state.js', 
-  '/js/game-engine.js',
-  '/js/data-service.js', 
-  '/js/config.js',
-  '/js/map-service.js', 
+'/',
+'/index.html',
+'/manifest.json',
+'/style.css',
+'/js/app.js',
+'/js/ui-manager.js', 
+'/js/nav-engine.js',
+'/js/state.js', 
+'/js/game-engine.js',
+'/js/data-service.js', 
+'/js/config.js',
+'/js/map-service.js', 
 '/tracks/ABEDULARDEMURIELVIEJO.kml',
 '/tracks/BCAMINODELOSLLANOS.kml',
 '/tracks/BCAÑONDELRIOLOBOS.kml',
@@ -120,57 +120,56 @@ const assets = [
 '/icons/wood.png',
 ];
 
-// EVENTO DE INSTALACIÓN: Guarda los archivos en el móvil
+// EVENTO DE INSTALACIÓN
 self.addEventListener('install', event => {
+  // Fuerza a este SW a convertirse en el SW activo
+  self.skipWaiting(); 
+  
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Cacheando archivos de El Nido...');
-        return cache.addAll(assets);
-      })
-  );
-});
-
-// EVENTO DE ACTIVACIÓN: Limpia cachés antiguas si cambias el nombre
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => {
-      return Promise.all(
-        keys.filter(key => key !== CACHE_NAME)
-            .map(key => caches.delete(key))
-      );
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('Cacheando archivos de El Nido v2...');
+      return cache.addAll(assets);
     })
   );
 });
 
-// EVENTO FETCH: La magia del offline
+// EVENTO DE ACTIVACIÓN
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    Promise.all([
+      // Toma el control de todas las pestañas inmediatamente
+      self.clients.claim(), 
+      // Borra las cachés viejas (v1, etc.)
+      caches.keys().then(keys => {
+        return Promise.all(
+          keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+        );
+      })
+    ])
+  );
+});
+
+// EVENTO FETCH (Mantén tu lógica de Google Sheets que es correcta)
 self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // ESTRATEGIA ESPECIAL PARA GOOGLE SHEETS / DATOS EXTERNOS
-  if (url.hostname === 'docs.google.com' || url.hostname === 'spreadsheets.google.com') {
+  if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
     event.respondWith(
       fetch(request)
         .then(response => {
-          // Si hay red, clonamos la respuesta y la guardamos en la caché
           const copy = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
           return response;
         })
-        .catch(() => {
-          // Si NO hay red, buscamos la copia guardada
-          return caches.match(request);
-        })
+        .catch(() => caches.match(request))
     );
-    return; // Salimos para que no ejecute el código de abajo
+    return;
   }
 
-  // ESTRATEGIA PARA EL RESTO DE ARCHIVOS (La que ya tenías)
   event.respondWith(
-    caches.match(request).then(response => {
-      return response || fetch(request);
-    })
+    caches.match(request).then(response => response || fetch(request))
   );
 });
+
 

@@ -145,21 +145,32 @@ self.addEventListener('activate', event => {
 
 // EVENTO FETCH: La magia del offline
 self.addEventListener('fetch', event => {
-  // Solo interceptamos peticiones GET (no formularios de contacto, por ejemplo)
-  if (event.request.method !== 'GET') return;
+  const { request } = event;
+  const url = new URL(request.url);
 
+  // ESTRATEGIA ESPECIAL PARA GOOGLE SHEETS / DATOS EXTERNOS
+  if (url.hostname === 'docs.google.com' || url.hostname === 'spreadsheets.google.com') {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          // Si hay red, clonamos la respuesta y la guardamos en la caché
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => {
+          // Si NO hay red, buscamos la copia guardada
+          return caches.match(request);
+        })
+    );
+    return; // Salimos para que no ejecute el código de abajo
+  }
+
+  // ESTRATEGIA PARA EL RESTO DE ARCHIVOS (La que ya tenías)
   event.respondWith(
-    caches.match(event.request).then(cachedResponse => {
-      // Si está en caché, lo devuelve. Si no, va a la red.
-      return cachedResponse || fetch(event.request).then(networkResponse => {
-        // OPCIONAL: Podríamos guardar en caché automáticamente nuevas fotos que el usuario vea
-        return networkResponse;
-      });
-    }).catch(() => {
-      // Si falla todo (no hay red ni caché), podrías devolver una página de error offline
-      if (event.request.mode === 'navigate') {
-        return caches.match('/index.html');
-      }
+    caches.match(request).then(response => {
+      return response || fetch(request);
     })
   );
 });
+

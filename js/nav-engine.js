@@ -6,6 +6,11 @@ let isRecording = false;
 let watchId = null;
 let currentPath = [];
 let polyline = null;
+let navWakeLock = null; // <--- Nueva variable para el mapa
+let autoCenter = false; // Por defecto no nos sigue
+const ordenCapas = ['osm', 'topo', 'sat'];
+let indiceCapaActual = 0;
+
 // Definimos los proveedores de mapas
 const baseLayers = {
     'osm': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -112,7 +117,9 @@ function actualizarMapa(point) {
         polyline.setLatLngs(currentPath);
     }
 
-    state.maps.nav.panTo(point);
+    if (autoCenter) {
+        state.maps.nav.panTo(point);
+    }
 }
 
 function stopRecording(btn) {
@@ -334,10 +341,80 @@ function asegurarMapaInicializado() {
         }).addTo(window.state.maps.nav);
 
         console.log("Mapa de navegación listo.");
+        requestWakeLock();
     } catch (e) {
         console.error("Error al crear el mapa:", e);
     }
 }
+
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try { 
+            navWakeLock = await navigator.wakeLock.request('screen'); 
+            console.log("Pantalla bloqueada para navegación");
+        } catch (e) {
+            console.error("Fallo al bloquear pantalla:", e);
+        }
+    }
+}
+
+export function toggleseguir() {
+    const btn = document.getElementById('btn-seguir');
+    const img = btn?.querySelector('img');
+
+    // Cambiamos el estado (si era true pasa a false y viceversa)
+    autoCenter = !autoCenter;
+
+    if (autoCenter) {
+        // --- MODO SEGUIMIENTO ACTIVO ---
+        if (img) img.src = 'icons/Seguir.png'; 
+        btn.classList.add('seguimiento-active'); // Opcional: para darle un brillo en CSS
+        
+        // Si ya tenemos posición, centramos al activar
+        if (currentPath.length > 0) {
+            state.maps.nav.panTo(currentPath[currentPath.length - 1]);
+        }
+        mostrarToast("Seguimiento GPS activado");
+    } else {
+        // --- MODO LIBRE ---
+        if (img) img.src = 'icons/NOSeguir.png'; 
+        btn.classList.remove('seguimiento-active');
+        mostrarToast("Mapa libre: explora la ruta");
+    }
+}
+
+// Hacerlo disponible para el onclick del HTML
+window.togglesegir = toggleseguir;
+
+export function ciclarCapas() {
+    const mapa = state.maps.nav;
+    if (!mapa) return;
+
+    // Aumentamos el índice y volvemos a 0 si llegamos al final
+    indiceCapaActual = (indiceCapaActual + 1) % ordenCapas.length;
+    const tipo = ordenCapas[indiceCapaActual];
+
+    // 2. Limpiamos capas previas
+    mapa.eachLayer((layer) => {
+        if (layer instanceof L.TileLayer) {
+            mapa.removeLayer(layer);
+        }
+    });
+
+    // 3. Añadimos la nueva capa
+    const nuevaCapa = baseLayers[tipo];
+    nuevaCapa.addTo(mapa);
+
+    // 4. Feedback visual al usuario
+    const nombres = { 'osm': 'Callejero', 'topo': 'Montaña', 'sat': 'Satélite' };
+    mostrarToast(`Mapa: ${nombres[tipo]}`);
+}
+
+// No olvides exponerla al window
+window.ciclarCapas = ciclarCapas;
+
+
+
 
 
 

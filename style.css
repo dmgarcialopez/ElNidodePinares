@@ -29,6 +29,57 @@ h4 { font-size: 16px; color: #aed581; text-shadow: 1px 1px 2px black; text-align
 .btn-circle:active { transform: scale(0.92); }
 .btn-circle img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
 
+/* EL MARCO MAESTRO */
+.nav-container {
+    width: 100%;
+    height: 80%;
+    max-width: 800px;
+    margin: 0 auto;        /* Esto centra el bloque entero en la pantalla */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;  /* Esto obliga a los hijos (mapa) a estirarse al ancho total */
+}
+
+/* EL MAPA: Ahora heredará el ancho del contenedor */
+#nav-map {
+    width: 100% !important;
+    height: 60%;           /* O el alto que prefieras */
+    margin: 0 !important;   /* Elimina cualquier margen residual */
+    padding: 0 !important;
+    display: block;         /* Evita espacios extra de elementos en línea */
+    clear: both;
+}
+
+/* Forzamos que Leaflet use todo el espacio disponible */
+.leaflet-container {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* LA BOTONERA: Se ajustará automáticamente al mismo ancho */
+.nav-row-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    width: 100%;
+    padding: 15px 0;
+    gap: 5px;
+    justify-items: center;
+}
+
+.btn-circle1 {
+    width: 50px !important;
+    height: 50px !important;
+    background: none !important;
+    border: none !important;
+    padding: 0;
+}
+
+.btn-circle1 img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
 .mic-container { margin-top: 5px; text-align: center; }
 #mic-status { font-size: 13px; font-weight: bold; color: white; margin-top: 8px; height: 18px; text-shadow: 1px 1px 2px black; }
 

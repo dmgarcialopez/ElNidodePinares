@@ -5,9 +5,27 @@ import { state } from './state.js';
 import * as Nav from './nav-engine.js';
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
-    .then(() => console.log("Service Worker de El Nido registrado con éxito"))
-    .catch(err => console.error("Error al registrar el SW", err));
+    // 1. Escuchar mensajes ANTES de registrar
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'TOAST') {
+            const toast = document.getElementById('pwa-toast');
+            if (toast) {
+                toast.innerText = event.data.text;
+                toast.style.display = 'block';
+                setTimeout(() => { toast.style.display = 'none'; }, 5000);
+            }
+        }
+    });
+
+    // 2. Registro con ruta relativa pura
+    // Al NO poner '/' delante, el navegador lo busca en la misma carpeta donde está el index.html
+    navigator.serviceWorker.register('sw.js') 
+        .then(reg => {
+            console.log("✅ SW activo en el subdominio:", reg.scope);
+        })
+        .catch(err => {
+            console.error("❌ Error en el registro:", err);
+        });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

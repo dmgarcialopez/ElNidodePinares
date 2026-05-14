@@ -14,10 +14,10 @@ const assets = [
 '/js/game-engine.js',
 '/js/data-service.js', 
 '/js/config.js',
-'/js/map-service.js', 
+'/js/map-engine.js', 
 '/tracks/ABEDULARDEMURIELVIEJO.kml',
 '/tracks/BCAMINODELOSLLANOS.kml',
-'/tracks/BCAÑONDELRIOLOBOS.kml',
+'/tracks/BCANONDELRIOLOBOS.kml',
 '/tracks/BCASTROVIEJO.kml',
 '/tracks/BEMBALSEDELACUERDADELPOZO.kml',
 '/tracks/BLAFUENTONA.kml',
@@ -25,8 +25,8 @@ const assets = [
 '/tracks/BPINARGRANDE.kml',
 '/tracks/BREFUGIODEPESCADORES.kml',
 '/tracks/BSUBIDAALURBION.kml',
-'/tracks/CALATAÑAZORYSABINARDECALATAÑAZOR.kml',
-'/tracks/CAÑONDELRIOLOBOSYMIRADORDELAGALIANA.kml',
+'/tracks/CALATANAZORYSABINAR.kml',
+'/tracks/CANONDELRIOLOBOSYMIRADORDELAGALIANA.kml',
 '/tracks/CASCADADELACHORLA.kml',
 '/tracks/CASCADADELAMINADELMEDICO.kml',
 '/tracks/CASCASADEFUENTETOBA.kml',
@@ -58,7 +58,7 @@ const assets = [
 '/tracks/LASCALDERASDELRIOPALAZUELO.kml',
 '/tracks/MIRADORDECABEZAALTA.kml',
 '/tracks/MIRADORDELAGUNANEGRAYLAGUNAHELADA.kml',
-'/tracks/MIRADORDEPEÑAGORDA.kml',
+'/tracks/MIRADORDEPENAGORDA.kml',
 '/tracks/NECROPOLISDELALTOARLANZA.kml',
 '/tracks/PICODEURBIONYNACIMIENTODELDUERO.kml',
 '/tracks/POBLADODELACERCA.kml',
@@ -120,17 +120,42 @@ const assets = [
 '/icons/wood.png',
 ];
 
-// EVENTO DE INSTALACIÓN
+// Función para enviar mensajes a la ventana (UI)
+function enviarMensaje(texto) {
+    self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+            client.postMessage({
+                type: 'TOAST',
+                text: texto
+            });
+        });
+    });
+}
+
+// UN SOLO EVENTO DE INSTALACIÓN (FUSIONADO)
 self.addEventListener('install', event => {
-  // Fuerza a este SW a convertirse en el SW activo
-  self.skipWaiting(); 
-  
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      console.log('Cacheando archivos de El Nido v2...');
-      return cache.addAll(assets);
-    })
-  );
+    // 1. Forzamos a que el nuevo SW tome el mando
+    self.skipWaiting(); 
+    
+    event.waitUntil(
+        caches.open(CACHE_NAME).then(async (cache) => {
+            console.log('Iniciando instalación de El Nido v3...');
+            
+            // 2. Descarga secuencial de archivos (evita bloqueos de red)
+            for (const url of assets) {
+                try {
+                    await cache.add(url);
+                    // console.log(`✅ Guardado: ${url}`);
+                } catch (err) {
+                    console.warn(`⚠️ Error al guardar: ${url}`, err);
+                }
+            }
+            
+            // 3. UNA VEZ TERMINADO TODO, enviamos el mensaje a la UI
+            console.log('Caché completada con éxito.');
+            enviarMensaje("📲 App lista para usar offline");
+        })
+    );
 });
 
 // EVENTO DE ACTIVACIÓN
@@ -151,25 +176,40 @@ self.addEventListener('activate', event => {
 
 // EVENTO FETCH (Mantén tu lógica de Google Sheets que es correcta)
 self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
+    const { request } = event;
+    const url = new URL(request.url);
 
-  if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
+    // ESTRATEGIA PARA GOOGLE SHEETS
+    if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
+        event.respondWith(
+            fetch(request)
+                .then(response => {
+                    const copy = response.clone();
+                    caches.open(CACHE_NAME).then(cache => {
+                        cache.put(request, copy);
+                        // ENVIAR MENSAJE: Solo cuando se guarda con éxito
+                        enviarMensaje("✅ Datos de Google Sheets actualizados");
+                    });
+                    return response;
+                })
+                .catch(() => {
+                    // Si falla la red, intentamos sacar de caché y avisamos
+                    return caches.match(request).then(response => {
+                        if (response) {
+                            enviarMensaje("📴 Modo Offline: Usando datos guardados");
+                            return response;
+                        }
+                    });
+                })
+        );
+        return;
+    }
+
+    // ESTRATEGIA PARA EL RESTO DE ARCHIVOS
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-          return response;
+        caches.match(request).then(response => {
+            return response || fetch(request);
         })
-        .catch(() => caches.match(request))
     );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then(response => response || fetch(request))
-  );
 });
-
 

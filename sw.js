@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.1';
+const CACHE_NAME = 'ENDP.1.0.2';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -132,6 +132,28 @@ function enviarMensaje(texto) {
     });
 }
 
+// --- FUNCIÓN PARA MANEJAR VIDEOS (SOPORTE DE RANGOS) ---
+async function handleRangeRequest(request, response) {
+    const rangeHeader = request.headers.get('Range');
+    if (!rangeHeader) return response;
+
+    const arrayBuffer = await response.arrayBuffer();
+    const match = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
+    const start = parseInt(match[1], 10);
+    const end = match[2] ? parseInt(match[2], 10) : arrayBuffer.byteLength - 1;
+
+    const slicedBuffer = arrayBuffer.slice(start, end + 1);
+    return new Response(slicedBuffer, {
+        status: 206,
+        statusText: 'Partial Content',
+        headers: {
+            ...Object.fromEntries(response.headers),
+            'Content-Range': `bytes ${start}-${end}/${arrayBuffer.byteLength}`,
+            'Content-Length': slicedBuffer.byteLength,
+        },
+    });
+}
+
 self.addEventListener('install', event => {
     self.skipWaiting(); 
     event.waitUntil(
@@ -165,7 +187,20 @@ self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // ESTRATEGIA PARA GOOGLE SHEETS
+    // Si es un video, usamos la lógica de rangos
+    if (url.pathname.endsWith('.mp4')) {
+        event.respondWith(
+            caches.match(request).then(async (cachedResponse) => {
+                if (cachedResponse) {
+                    // Si está en caché, lo procesamos para soportar rangos
+                    return handleRangeRequest(request, cachedResponse);
+                }
+                // Si no está en caché, vamos a la red
+                return fetch(request);
+            })
+        );
+        return;
+    }
   // ESTRATEGIA PARA GOOGLE SHEETS (Network First)
 if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
     event.respondWith(

@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.0';
+const CACHE_NAME = 'ENDP.1.0.1';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -165,38 +165,36 @@ self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-// ESTRATEGIA PARA GOOGLE SHEETS (Manejo de Redirecciones 307)
+    // ESTRATEGIA PARA GOOGLE SHEETS
+  // ESTRATEGIA PARA GOOGLE SHEETS (Network First)
 if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
     event.respondWith(
-        fetch(request, { redirect: 'follow' }) // <--- Forzamos a seguir la redirección
+        fetch(request) // Intentamos red primero
             .then(response => {
-                // Si la respuesta es correcta (status 200) o es una respuesta opaca (status 0)
-                if (response.status === 200 || response.status === 0) {
+                // Si la respuesta es válida, la guardamos en caché
+                if (response.ok || response.status === 0) {
                     const copy = response.clone();
                     caches.open(CACHE_NAME).then(cache => {
-                        // Guardamos la respuesta final bajo la URL original de la petición
                         cache.put(request, copy);
                     });
-                    return response;
                 }
-                
-                // Si sigue siendo una redirección o error, intentamos buscar lo que tengamos en caché
-                return caches.match(request).then(cached => cached || response);
+                return response;
             })
             .catch(() => {
-                // OFFLINE: Retornar lo que haya en caché
-                return caches.match(request).then(response => {
-                    if (response) {
-                        enviarMensaje("📴 Datos cargados desde la memoria (Offline)");
-                        return response;
+                // Si falla la red (Modo Avión), buscamos en caché
+                return caches.match(request).then(cached => {
+                    if (cached) {
+                        return cached;
                     }
+                    // Si no hay nada en caché, devolvemos un error coherente
+                    return new Response("Offline: Datos no disponibles", { status: 503 });
                 });
             })
     );
-    return;
+    return; // Importante para que no siga ejecutando el código de abajo
 }
 
-    // ESTRATEGIA PARA EL RESTO DE ARCHIVOS (Cache First)
+    // ESTRATEGIA PARA EL RESTO (Assets estáticos: CSS, JS, Iconos, KML)
     event.respondWith(
         caches.match(request).then(response => {
             return response || fetch(request);

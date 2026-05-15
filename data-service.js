@@ -8,23 +8,21 @@ export function formatPwaUrl(url) {
 }
 
 export async function loadAllData() {
-    // Usamos PapaParse (asumiendo que está cargado globalmente en el HTML)
     for (let key in CONFIG.URLS) {
         Papa.parse(CONFIG.URLS[key], {
             download: true,
+            // AÑADIR ESTO: Configura la petición para que sea compatible con CORS y el SW
+            downloadRequest: {
+                headers: { 'Accept': 'text/csv' },
+                mode: 'cors' 
+            },
             complete: (results) => {
+                // ... (tu lógica de filtrado de duendes se queda igual)
                 if (key === 'duendes') {
-                    const all = results.data.slice(1);
-                    
-                    // CORRECCIÓN: Accedemos a la nueva ruta del estado con seguridad
-                    // Si state.game no existe aún, usamos un array vacío
                     const capturados = state.game?.captured || [];
-
-                    // Guardamos en state.db.duendes para que el motor del juego los encuentre
-                    state.db.duendes = all.filter(d => 
+                    state.db.duendes = results.data.slice(1).filter(d => 
                         !capturados.some(c => c[0] === d[0])
                     );
-                    
                     console.log(`✓ Duendes listos: ${state.db.duendes.length}`);
                 } else {
                     state.db[key] = results.data.slice(1);

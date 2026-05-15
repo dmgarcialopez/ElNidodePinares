@@ -343,7 +343,7 @@ export function renderBiciList() {
 }
 
 // 2. Función puente para conectar la lista con el NavEngine
-window.prepararNavegacion = function(urlTrack) {
+window.prepararNavegacion = async function(urlTrack) {
     console.log("Iniciando navegación: ", urlTrack);
 
     // 1. Ocultar todas las pantallas con fuerza bruta
@@ -357,15 +357,45 @@ window.prepararNavegacion = function(urlTrack) {
     const nav = document.getElementById('nav-screen');
     if (nav) {
         nav.classList.remove('hidden');
-        nav.style.display = 'flex'; // Usamos flex para que el mapa se estire
+        nav.style.display = 'flex'; 
     }
 
-    // 3. Llamar al motor
-    setTimeout(() => {
-        if (typeof window.cargarTrackExterno === 'function') {
-            window.cargarTrackExterno(urlTrack);
+    // --- LÓGICA DE CARGA LOCAL MEJORADA (IndexedDB) ---
+    try {
+        // Detectamos la extensión dinámicamente (kml o gpx)
+        const extension = urlTrack.split('.').pop().toLowerCase();
+        
+        // Buscamos el archivo en la DB
+        const blob = await Data.getFile(`/${urlTrack}`); 
+
+        if (blob) {
+            console.log(`📍 ${extension.toUpperCase()} encontrado en IndexedDB, cargando modo offline...`);
+            const trackText = await blob.text();
+            
+            // Usamos el delay para que Leaflet tenga tiempo de inicializar el contenedor
+            setTimeout(() => {
+                if (typeof window.cargarTrackDesdeTexto === 'function') {
+                    // Pasamos el texto y la extensión detectada
+                    window.cargarTrackDesdeTexto(trackText, extension);
+                } else {
+                    // Fallback por si la función no está disponible
+                    window.cargarTrackExterno(urlTrack);
+                }
+            }, 200);
+            
+        } else {
+            console.log("🌐 Track no encontrado en DB, intentando carga normal (Red/SW)...");
+            setTimeout(() => {
+                if (typeof window.cargarTrackExterno === 'function') {
+                    window.cargarTrackExterno(urlTrack);
+                }
+            }, 200);
         }
-    }, 200);
+    } catch (err) {
+        console.error("Error en el puente de navegación local:", err);
+        // Si hay error en la DB, intentamos el método tradicional
+        window.cargarTrackExterno(urlTrack);
+    }
 };
 
 

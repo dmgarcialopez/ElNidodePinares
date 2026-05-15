@@ -1,5 +1,40 @@
 import { CONFIG } from './config.js';
 import { state } from './state.js';
+const DB_NAME = 'PinaresDB';
+const DB_VERSION = 1;
+
+export async function initDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains('files')) {
+                db.createObjectStore('files');
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+export async function saveFile(key, blob) {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction('files', 'readwrite');
+        tx.objectStore('files').put(blob, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
+export async function getFile(key) {
+    const db = await initDB();
+    return new Promise((resolve) => {
+        const tx = db.transaction('files', 'readonly');
+        const request = tx.objectStore('files').get(key);
+        request.onsuccess = () => resolve(request.result);
+    });
+}
 
 export function formatPwaUrl(url) {
     if (!url || !url.includes("elnidodepinares.es")) return url;

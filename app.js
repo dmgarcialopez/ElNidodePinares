@@ -28,6 +28,28 @@ if ('serviceWorker' in navigator) {
         });
 }
 
+async function syncHeavyFiles() {
+    const filesToSync = [
+        '/videos/Radar.mp4',
+        '/tracks/BCAMINODELOSLLANOS.kml',
+        // ... todos tus videos y tracks
+    ];
+
+    for (const url of filesToSync) {
+        const exists = await Data.getFile(url);
+        if (!exists) {
+            console.log(`Descargando para IndexedDB: ${url}`);
+            try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                await Data.saveFile(url, blob);
+            } catch (e) {
+                console.error("Error descargando:", url);
+            }
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. LIMPIEZA DE HISTORIAL AL ARRANCAR
     // Esto sobreescribe cualquier "basura" de sesiones anteriores 

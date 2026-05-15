@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.9';
+const CACHE_NAME = 'ENDP.1.0.11';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -15,69 +15,6 @@ const assets = [
 '/js/data-service.js', 
 '/js/config.js',
 '/js/map-engine.js', 
-'/tracks/ABEDULARDEMURIELVIEJO.kml',
-'/tracks/BCAMINODELOSLLANOS.kml',
-'/tracks/BCANONDELRIOLOBOS.kml',
-'/tracks/BCASTROVIEJO.kml',
-'/tracks/BEMBALSEDELACUERDADELPOZO.kml',
-'/tracks/BLAFUENTONA.kml',
-'/tracks/BLAMUEDRA.kml',
-'/tracks/BPINARGRANDE.kml',
-'/tracks/BREFUGIODEPESCADORES.kml',
-'/tracks/BSUBIDAALURBION.kml',
-'/tracks/CALATANAZORYSABINAR.kml',
-'/tracks/CANONDELRIOLOBOSYMIRADORDELAGALIANA.kml',
-'/tracks/CASCADADELACHORLA.kml',
-'/tracks/CASCADADELAMINADELMEDICO.kml',
-'/tracks/CASCASADEFUENTETOBA.kml',
-'/tracks/CASTROVIEJO.kml',
-'/tracks/COVARNANTES.kml',
-'/tracks/CUEVASERENA.kml',
-'/tracks/DESFILADERODELAYECLA.kml',
-'/tracks/ELCHORRON.kml',
-'/tracks/EMBALSEDELACUERDADELPOZOYPLAYAPITA.kml',
-'/tracks/ERMITADESANBAUDELIO.kml',
-'/tracks/FUENTESANZA.kml',
-'/tracks/HABUELOSDELBOSQUE.kml',
-'/tracks/HALTOLOSBARRANCOS.kml',
-'/tracks/HANILLOVERDE.kml',
-'/tracks/HAYEDODECOVALEDA.kml',
-'/tracks/HBRABOJO.kml',
-'/tracks/HCASCADASDECOVALEDA.kml',
-'/tracks/HLAGUNASDEURBION.kml',
-'/tracks/HLAMORRADELFRAILE.kml',
-'/tracks/HLOSLLANOS.kml',
-'/tracks/HMOJONPARDO.kml',
-'/tracks/HOTEROMAYOR.kml',
-'/tracks/HVALDELAHIERBA.kml',
-'/tracks/LAFUENTONA.kml',
-'/tracks/LAGUNANEGRA.kml',
-'/tracks/LAGUNASDENEILA.kml',
-'/tracks/LAGUNAVERDE.kml',
-'/tracks/LAMUEDRA.kml',
-'/tracks/LASCALDERASDELRIOPALAZUELO.kml',
-'/tracks/MIRADORDECABEZAALTA.kml',
-'/tracks/MIRADORDELAGUNANEGRAYLAGUNAHELADA.kml',
-'/tracks/MIRADORDEPENAGORDA.kml',
-'/tracks/NECROPOLISDELALTOARLANZA.kml',
-'/tracks/PICODEURBIONYNACIMIENTODELDUERO.kml',
-'/tracks/POBLADODELACERCA.kml',
-'/tracks/PUNTODENIEVESANTAINES.kml',
-'/tracks/RASODELANAVA.kml',
-'/tracks/REFUGIODEPESCADORES.kml',
-'/tracks/SANTODOMINGODESILOS.kml',
-'/videos/Radar.mp4',
-'/videos/TND05.mp4',
-'/videos/TND10.mp4',
-'/videos/TND15.mp4',
-'/videos/TND20.mp4',
-'/videos/TND25.mp4',
-'/videos/TND30.mp4',
-'/videos/TND35.mp4',
-'/videos/TND40.mp4',
-'/videos/TND45.mp4',
-'/videos/TND50.mp4',
-'/videos/Troll.mp4',
 '/icons/AddSetas.png',
 '/icons/Aparcar.png',
 '/icons/bici.png',
@@ -132,28 +69,7 @@ function enviarMensaje(texto) {
     });
 }
 
-// --- FUNCIÓN PARA MANEJAR VIDEOS (SOPORTE DE RANGOS) ---
-async function handleRangeRequest(request, response) {
-    const rangeHeader = request.headers.get('Range');
-    if (!rangeHeader) return response;
-
-    const arrayBuffer = await response.arrayBuffer();
-    const match = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
-    const start = parseInt(match[1], 10);
-    const end = match[2] ? parseInt(match[2], 10) : arrayBuffer.byteLength - 1;
-
-    const slicedBuffer = arrayBuffer.slice(start, end + 1);
-    return new Response(slicedBuffer, {
-        status: 206,
-        statusText: 'Partial Content',
-        headers: {
-            ...Object.fromEntries(response.headers),
-            'Content-Range': `bytes ${start}-${end}/${arrayBuffer.byteLength}`,
-            'Content-Length': slicedBuffer.byteLength,
-        },
-    });
-}
-
+// --- INSTALACIÓN SECUENCIAL (EL MÉTODO ANTIGUO SEGURO) ---
 self.addEventListener('install', event => {
     self.skipWaiting();
     event.waitUntil(
@@ -179,70 +95,39 @@ self.addEventListener('install', event => {
     );
 });
 
+// --- ACTIVACIÓN Y LIMPIEZA ---
 self.addEventListener('activate', event => {
     event.waitUntil(
-        Promise.all([
-            self.clients.claim(),
-            caches.keys().then(keys => {
-                return Promise.all(
-                    keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-                );
-            })
-        ])
+        caches.keys().then(keys => {
+            return Promise.all(
+                keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+            );
+        }).then(() => self.clients.claim())
     );
 });
 
+// --- FETCH (GESTIÓN DE PETICIONES) ---
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
-    event.respondWith(
-        fetch(request) // Intentamos red primero
-            .then(response => {
-                // Si la respuesta es válida, la guardamos en caché
-                if (response.ok || response.status === 0) {
-                    const copy = response.clone();
-                    caches.open(CACHE_NAME).then(cache => {
-                        cache.put(request, copy);
-                    });
-                }
-                return response;
-            })
-            .catch(() => {
-                // Si falla la red (Modo Avión), buscamos en caché
-                return caches.match(request).then(cached => {
-                    if (cached) {
-                        return cached;
-                    }
-                    // Si no hay nada en caché, devolvemos un error coherente
-                    return new Response("Offline: Datos no disponibles", { status: 503 });
-                });
-            })
-    );
-    return; // Importante para que no siga ejecutando el código de abajo
-}
+    // 1. Google Sheets (Network First)
+    if (url.hostname.includes('docs.google.com')) {
+        event.respondWith(
+            fetch(request)
+                .then(res => {
+                    const copy = res.clone();
+                    caches.open(CACHE_NAME).then(c => c.put(request, copy));
+                    return res;
+                })
+                .catch(() => caches.match(request))
+        );
+        return;
+    } 
 
-    // 2. VÍDEOS CON RANGOS
-    if (request.url.endsWith('.mp4')) {
-    event.respondWith(
-        caches.match(request).then(cachedResponse => {
-            if (cachedResponse) {
-                // Si está en caché, lo devolvemos. 
-                // Nota: En iOS esto puede seguir fallando sin Range Support.
-                return cachedResponse;
-            }
-            return fetch(request);
-        })
-    );
-    return;
-}
-
-    // 3. RESTO (Cache First)
+    // 3. Resto de assets (Cache First)
     event.respondWith(
         caches.match(request).then(res => res || fetch(request))
     );
 });
-
-
 

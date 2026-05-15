@@ -515,6 +515,79 @@ export function cargarTrackExterno(url) {
 
 window.cargarTrackExterno = cargarTrackExterno;
 
+export function cargarTrackDesdeTexto(strData, extension = 'kml') {
+    if (!strData) return;
+
+    // 1. Asegurar mapa y estado (Igual que tu original)
+    if (!window.state.maps.nav) {
+        window.state.maps.nav = L.map('nav-map', { 
+            zoomControl: false,
+            dragging: true,
+            touchZoom: true
+        }).setView([41.828, -3.005], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(window.state.maps.nav);
+    }
+
+    const mapa = window.state.maps.nav;
+    const label = document.getElementById('track-name');
+
+    // Limpieza total de rutas previas
+    mapa.eachLayer(l => {
+        if (l instanceof L.Polyline || (window.L.KML && l instanceof L.KML) || l instanceof L.GPX) {
+            mapa.removeLayer(l);
+        }
+    });
+
+    // Despertar el mapa
+    setTimeout(() => mapa.invalidateSize(), 200);
+
+    // 2. EXTRAER NOMBRE DEL XML (Funciona para KML y GPX)
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(strData, "text/xml");
+    
+    const nombreRuta = xmlDoc.querySelector('Placemark > name, trk > name')?.textContent;
+    const nombreCarpeta = xmlDoc.querySelector('Folder > name')?.textContent;
+    const nombreCualquiera = xmlDoc.querySelector('name')?.textContent;
+    
+    let nombreFinal = nombreRuta || nombreCarpeta || nombreCualquiera || "Ruta Local";
+    if (label) label.innerText = nombreFinal.trim();
+
+    // 3. CARGA SEGÚN FORMATO
+    if (extension === 'kml') {
+        // L.KML prefiere el documento XML ya parseado
+        const trackKml = new L.KML(xmlDoc); 
+        mapa.addLayer(trackKml);
+
+        trackKml.on("loaded", () => {
+            const bounds = trackKml.getBounds();
+            if (bounds.isValid()) mapa.fitBounds(bounds, { padding: [40, 40] });
+        });
+
+        // Refuerzo de encuadre (como en tu original)
+        setTimeout(() => {
+            if (trackKml.getBounds().isValid()) mapa.fitBounds(trackKml.getBounds(), { padding: [40, 40] });
+        }, 600);
+
+    } else if (extension === 'gpx') {
+        // L.GPX detecta automáticamente si le pasas el string con el XML
+        const gpxTrack = new L.GPX(strData, {
+            parseElements: ['track'],
+            polyline_options: { color: '#007FFF', weight: 6, opacity: 0.8 },
+            marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null, wptIconUrls: {} }
+        });
+
+        gpxTrack.on('loaded', e => {
+            const bounds = e.target.getBounds();
+            if (bounds.isValid()) mapa.fitBounds(bounds, { padding: [40, 40] });
+        });
+
+        gpxTrack.addTo(mapa);
+    }
+}
+
+window.cargarTrackDesdeTexto = cargarTrackDesdeTexto;
+
+
 function asegurarMapaInicializado() {
     if (window.state.maps.nav) return;
 

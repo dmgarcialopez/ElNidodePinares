@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.3';
+const CACHE_NAME = 'ENDP.1.0.4';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -200,52 +200,47 @@ self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Si es un video, usamos la lógica de rangos
+    // 1. PRIORIDAD: GOOGLE SHEETS (Network First)
+    if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
+        event.respondWith(
+            fetch(request)
+                .then(response => {
+                    // Si tenemos red, guardamos la copia fresca
+                    if (response.ok || response.type === 'opaque') {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => {
+                    // Si no hay red (Modo Avión), buscamos en caché
+                    return caches.match(request).then(cached => {
+                        if (cached) return cached;
+                        // Si no hay nada, devolvemos un error que PapaParse entienda
+                        return new Response('', { status: 404, statusText: 'Offline and not cached' });
+                    });
+                })
+        );
+        return; 
+    }
+
+    // 2. VIDEOS CON SOPORTE DE RANGOS (Para iOS/Safari)
     if (url.pathname.endsWith('.mp4')) {
         event.respondWith(
-            caches.match(request).then(async (cachedResponse) => {
-                if (cachedResponse) {
-                    // Si está en caché, lo procesamos para soportar rangos
-                    return handleRangeRequest(request, cachedResponse);
-                }
-                // Si no está en caché, vamos a la red
+            caches.match(request).then(cachedResponse => {
+                if (cachedResponse) return handleRangeRequest(request, cachedResponse);
                 return fetch(request);
             })
         );
         return;
     }
-  // ESTRATEGIA PARA GOOGLE SHEETS (Network First)
-if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
-    event.respondWith(
-        fetch(request) // Intentamos red primero
-            .then(response => {
-                // Si la respuesta es válida, la guardamos en caché
-                if (response.ok || response.status === 0) {
-                    const copy = response.clone();
-                    caches.open(CACHE_NAME).then(cache => {
-                        cache.put(request, copy);
-                    });
-                }
-                return response;
-            })
-            .catch(() => {
-                // Si falla la red (Modo Avión), buscamos en caché
-                return caches.match(request).then(cached => {
-                    if (cached) {
-                        return cached;
-                    }
-                    // Si no hay nada en caché, devolvemos un error coherente
-                    return new Response("Offline: Datos no disponibles", { status: 503 });
-                });
-            })
-    );
-    return; // Importante para que no siga ejecutando el código de abajo
-}
 
-    // ESTRATEGIA PARA EL RESTO (Assets estáticos: CSS, JS, Iconos, KML)
+    // 3. RESTO DE ARCHIVOS (Cache First)
     event.respondWith(
         caches.match(request).then(response => {
             return response || fetch(request);
         })
     );
 });
+
+

@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.2';
+const CACHE_NAME = 'ENDP.1.0.3';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -158,14 +158,27 @@ self.addEventListener('install', event => {
     self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            for (const url of assets) {
-                try {
-                    await cache.add(url);
-                } catch (err) {
-                    console.warn(`⚠️ Error al guardar: ${url}`, err);
+            console.log("🚀 Iniciando descarga paralela de assets...");
+            
+            // Dividimos en grupos para no saturar, pero descargando en paralelo
+            // cache.addAll es mucho más rápido que un bucle for
+            try {
+                await cache.addAll(assets);
+                console.log("✅ Todos los assets descargados");
+                enviarMensaje("📲 App lista para usar offline");
+            } catch (err) {
+                console.warn("⚠️ Falló la descarga masiva, intentando uno a uno como respaldo...", err);
+                // Si falla addAll (porque un solo archivo dio 404), 
+                // hacemos el fallback individual que ya tenías:
+                for (const url of assets) {
+                    try {
+                        await cache.add(url);
+                    } catch (e) {
+                        console.error("Error final en:", url);
+                    }
                 }
+                enviarMensaje("📲 App lista (con algunos errores)");
             }
-            enviarMensaje("📲 App lista para usar offline");
         })
     );
 });

@@ -142,7 +142,22 @@ export function refresh() {
     if (state.game.timer) {
         clearTimeout(state.game.timer);
     }
-    requestLocation();
+
+    // SI ya tenemos coordenadas, repintamos el mapa al instante
+    if (state.game.userCoords && state.game.userCoords.lat) {
+        console.log("Refresco instantáneo con coordenadas guardadas");
+        // Creamos un objeto que simule la estructura que recibe de Geolocation
+        const mockPos = {
+            coords: {
+                latitude: state.game.userCoords.lat,
+                longitude: state.game.userCoords.lng
+            }
+        };
+        updateGameStatus(mockPos);
+    } else {
+        // SI NO, no queda otra que pedir posición al GPS
+        requestLocation();
+    }
 }
 
 // --- UTILIDADES ---

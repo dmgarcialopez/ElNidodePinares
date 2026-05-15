@@ -80,23 +80,20 @@
             <div id="list-container" class="hidden"></div>
         </section>
 
-<section id="game-screen" class="screen hidden" style="display: flex !important; flex-direction: column !important; height: 100vh !important; width: 100% !important; max-width: 100% !important; overflow: hidden !important; background: #2e7d32; position: relative; margin: 0 auto;">    
-    <!-- 1. CABECERA (Altura fija estricta de 75px) -->
-    <div id="game-header" style="display: flex; align-items: center; justify-content: center; gap: 20px; padding: 10px; height: 75px; min-height: 75px; box-sizing: border-box; width: 100%;">
-        <button id="btn-album" class="btn-circle"><img src="icons/CapDuende.png" alt="Álbum"></button>
-        <div style="text-align: center;">
-            <div id="closest-info" style="color: white; font-weight: bold; font-size: 14px;">Posicionando GPS</div>
-            <div id="duende-name" style="color: #ffeb3b; font-size: 1.1em; font-weight: bold;">-------</div>
-        </div>
+    <section id="game-screen" class="screen hidden" style="display: flex !important; flex-direction: column !important; height: 100vh !important; width: 100% !important; max-width: 100% !important; overflow: hidden !important; background: url('icons/wood.png'); background-size: cover; background-position: center; position: relative; margin: 0 auto;">    
+    
+    <div id="game-header" style="display: flex; align-items: center; justify-content: center; gap: 20px; padding: 5px 5px 5px 5px; height: 90px; min-height: 75px; box-sizing: border-box; width: 100%; background: transparent;">
+    <button id="btn-album" class="btn-circle" style="margin-top: 10px;"><img src="icons/CapDuende.png" alt="Álbum"></button>
+    <div style="text-align: center; margin-top: 10px;">
+        <div id="closest-info" style="color: white; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px black;">Posicionando GPS</div>
+        <div id="duende-name" style="color: #ffeb3b; font-size: 1.1em; font-weight: bold; text-shadow: 1px 1px 2px black;">-------</div>
     </div>
+</div>
 
-    <!-- 2. EL MAPA (Altura calculada: Pantalla total menos cabecera y controles del vídeo) -->
-    <!-- Ajustamos a calc(100vh - 255px) para asegurar espacio total -->
-    <div id="game-map" style="width: 100% !important; height: calc(100vh - 255px) !important; min-height: 150px !important; position: relative; border-bottom: 2px solid rgba(255,255,255,0.2);"></div>
+    <div id="game-map" style="width: 100% !important; height: calc(100vh - 255px) !important; min-height: 150px !important; position: relative; border-bottom: 2px solid rgba(255,255,255,0.2); background: transparent !important;"></div>
 
-    <!-- 3. CONTROLES INFERIORES (Altura fija estricta de 180px) -->
-    <div id="game-controls" style="height: 180px; min-height: 180px; width: 100%; display: flex; align-items: center; justify-content: center; background: #2e7d32; box-sizing: border-box;">
-       <div id="video-container" style="width: 150px; height: 150px; cursor: pointer; border-radius: 20px; overflow: hidden; border: 3px solid white; position: relative; background: #1b5e20; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+    <div id="game-controls" style="height: 180px; min-height: 180px; width: 100%; display: flex; align-items: center; justify-content: center; background: transparent; box-sizing: border-box;">
+       <div id="video-container" style="width: 150px; height: 150px; cursor: pointer; border-radius: 20px; overflow: hidden; border: 3px solid white; position: relative; background: rgba(0,0,0,0.2); box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
             <video id="game-video" autoplay muted loop playsinline style="position: absolute; top: 50%; left: 50%; min-width: 100%; min-height: 100%; transform: translate(-50%, -50%) scale(1.4); object-fit: cover;"></video>
        </div>
     </div>
@@ -104,7 +101,7 @@
 </section>
 
         <!-- PANTALLA ÁLBUM -->
-        <section id="album-screen" class="screen hidden" style="background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('icons/FondoDuendes.png'); background-size: cover; overflow-y: auto;">
+        <section id="album-screen" class="screen hidden" style="background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('icons/wood.png'); background-size: cover; overflow-y: auto;">
             <div id="album-header" style="text-align: center; padding: 25px 15px 10px;">
                <h2 style="color: white; text-shadow: 2px 2px black; margin: 0; font-size: 24px;">Álbum de Capturas</h2>
             </div>
@@ -129,10 +126,9 @@
         </section>
 
         <!-- COMPONENTES DE INTERFAZ EMERGENTES (Dentro de #app) -->
-        <div id="toast-aviso" class="hidden" style="position: fixed; top: 200px; left: 50%; transform: translateX(-50%); background: rgba(27, 94, 32, 0.9); color: white; padding: 12px 25px; border-radius: 25px; z-index: 10000; font-weight: bold; text-align: center; min-width: 200px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+        <div id="toast-aviso" class="hidden" style="position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: rgba(27, 94, 32, 0.9); color: white; padding: 12px 25px; border-radius: 25px; z-index: 10000; font-weight: bold; text-align: center; min-width: 200px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
             <span id="toast-text"></span>
         </div>
-
         <div id="custom-confirm" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;">
             <div style="background: white; padding: 25px; border-radius: 20px; text-align: center; width: 85%; max-width: 320px; border: 4px solid #1b5e20;">
                 <p id="confirm-text" style="color: #333; font-weight: bold; margin-bottom: 25px; font-size: 1.1em; line-height: 1.4;"></p>

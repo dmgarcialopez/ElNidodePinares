@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.5';
+const CACHE_NAME = 'ENDP.1.0.7';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -155,30 +155,19 @@ async function handleRangeRequest(request, response) {
 }
 
 self.addEventListener('install', event => {
-    self.skipWaiting(); 
+    self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            console.log("🚀 Iniciando descarga paralela de assets...");
-            
-            // Dividimos en grupos para no saturar, pero descargando en paralelo
-            // cache.addAll es mucho más rápido que un bucle for
-            try {
-                await cache.addAll(assets);
-                console.log("✅ Todos los assets descargados");
-                enviarMensaje("📲 App lista para usar offline");
-            } catch (err) {
-                console.warn("⚠️ Falló la descarga masiva, intentando uno a uno como respaldo...", err);
-                // Si falla addAll (porque un solo archivo dio 404), 
-                // hacemos el fallback individual que ya tenías:
-                for (const url of assets) {
-                    try {
-                        await cache.add(url);
-                    } catch (e) {
-                        console.error("Error final en:", url);
-                    }
-                }
-                enviarMensaje("📲 App lista (con algunos errores)");
-            }
+            console.log("🚀 Descargando assets en paralelo...");
+            // Usamos Promise.all para que descargue todo a la vez, no uno por uno
+            const promises = assets.map(url => 
+                fetch(url).then(res => {
+                    if (res.ok) return cache.put(url, res);
+                    console.error("Fallo en:", url);
+                }).catch(err => console.error("Error red:", url))
+            );
+            await Promise.all(promises);
+            enviarMensaje("📲 App lista para usar offline");
         })
     );
 });
@@ -200,51 +189,36 @@ self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // 1. PRIORIDAD: GOOGLE SHEETS (Network First)
-    if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
+    // 1. GOOGLE SHEETS (Network First)
+    if (url.hostname.includes('docs.google.com')) {
         event.respondWith(
             fetch(request)
-                .then(response => {
-                    // Si tenemos red, guardamos la copia fresca
-                    if (response.ok || response.type === 'opaque') {
-                        const copy = response.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-                    }
-                    return response;
+                .then(res => {
+                    const copy = res.clone();
+                    caches.open(CACHE_NAME).then(c => c.put(request, copy));
+                    return res;
                 })
-                .catch(() => {
-                    // Si no hay red (Modo Avión), buscamos en caché
-                    return caches.match(request).then(cached => {
-                        if (cached) return cached;
-                        // Si no hay nada, devolvemos un error que PapaParse entienda
-                        return new Response('', { status: 404, statusText: 'Offline and not cached' });
-                    });
-                })
+                .catch(() => caches.match(request))
         );
-        return; 
+        return;
     }
 
-    // 2. VIDEOS CON SOPORTE DE RANGOS (Para iOS/Safari)
+    // 2. VÍDEOS CON RANGOS
     if (url.pathname.endsWith('.mp4')) {
-    event.respondWith(
-        caches.match(request).then(cachedResponse => {
-            if (cachedResponse) {
-                // Si está en caché, lo devolvemos tal cual.
-                // Si esto falla en iPhone, usaremos la red como respaldo automático.
-                return cachedResponse;
-            }
-            return fetch(request);
-        }).catch(() => fetch(request)) // Si hay cualquier error con la caché, intenta red.
-    );
-    return;
-}
+        event.respondWith(
+            caches.match(request).then(res => {
+                if (res) return handleRangeRequest(request, res);
+                return fetch(request);
+            })
+        );
+        return;
+    }
 
-    // 3. RESTO DE ARCHIVOS (Cache First)
+    // 3. RESTO (Cache First)
     event.respondWith(
-        caches.match(request).then(response => {
-            return response || fetch(request);
-        })
+        caches.match(request).then(res => res || fetch(request))
     );
 });
+
 
 

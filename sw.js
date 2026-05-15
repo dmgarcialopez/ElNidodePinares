@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.7';
+const CACHE_NAME = 'ENDP.1.0.9';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -158,15 +158,22 @@ self.addEventListener('install', event => {
     self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            console.log("🚀 Descargando assets en paralelo...");
-            // Usamos Promise.all para que descargue todo a la vez, no uno por uno
-            const promises = assets.map(url => 
-                fetch(url).then(res => {
-                    if (res.ok) return cache.put(url, res);
-                    console.error("Fallo en:", url);
-                }).catch(err => console.error("Error red:", url))
-            );
-            await Promise.all(promises);
+            console.log("🚀 Instalando archivos uno a uno...");
+            for (const url of assets) {
+                try {
+                    // Descarga y guarda individualmente
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        await cache.put(url, response);
+                        console.log(`✅ Guardado: ${url}`);
+                    } else {
+                        console.error(`❌ Fallo (Status ${response.status}): ${url}`);
+                    }
+                } catch (err) {
+                    console.error(`❌ Error de red en: ${url}`);
+                }
+            }
+            console.log("🏁 Proceso de instalación finalizado");
             enviarMensaje("📲 App lista para usar offline");
         })
     );
@@ -189,30 +196,47 @@ self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // 1. GOOGLE SHEETS (Network First)
-    if (url.hostname.includes('docs.google.com')) {
-        event.respondWith(
-            fetch(request)
-                .then(res => {
-                    const copy = res.clone();
-                    caches.open(CACHE_NAME).then(c => c.put(request, copy));
-                    return res;
-                })
-                .catch(() => caches.match(request))
-        );
-        return;
-    }
+if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
+    event.respondWith(
+        fetch(request) // Intentamos red primero
+            .then(response => {
+                // Si la respuesta es válida, la guardamos en caché
+                if (response.ok || response.status === 0) {
+                    const copy = response.clone();
+                    caches.open(CACHE_NAME).then(cache => {
+                        cache.put(request, copy);
+                    });
+                }
+                return response;
+            })
+            .catch(() => {
+                // Si falla la red (Modo Avión), buscamos en caché
+                return caches.match(request).then(cached => {
+                    if (cached) {
+                        return cached;
+                    }
+                    // Si no hay nada en caché, devolvemos un error coherente
+                    return new Response("Offline: Datos no disponibles", { status: 503 });
+                });
+            })
+    );
+    return; // Importante para que no siga ejecutando el código de abajo
+}
 
     // 2. VÍDEOS CON RANGOS
-    if (url.pathname.endsWith('.mp4')) {
-        event.respondWith(
-            caches.match(request).then(res => {
-                if (res) return handleRangeRequest(request, res);
-                return fetch(request);
-            })
-        );
-        return;
-    }
+    if (request.url.endsWith('.mp4')) {
+    event.respondWith(
+        caches.match(request).then(cachedResponse => {
+            if (cachedResponse) {
+                // Si está en caché, lo devolvemos. 
+                // Nota: En iOS esto puede seguir fallando sin Range Support.
+                return cachedResponse;
+            }
+            return fetch(request);
+        })
+    );
+    return;
+}
 
     // 3. RESTO (Cache First)
     event.respondWith(

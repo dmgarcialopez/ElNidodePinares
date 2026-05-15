@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.4';
+const CACHE_NAME = 'ENDP.1.0.5';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -226,14 +226,18 @@ self.addEventListener('fetch', event => {
 
     // 2. VIDEOS CON SOPORTE DE RANGOS (Para iOS/Safari)
     if (url.pathname.endsWith('.mp4')) {
-        event.respondWith(
-            caches.match(request).then(cachedResponse => {
-                if (cachedResponse) return handleRangeRequest(request, cachedResponse);
-                return fetch(request);
-            })
-        );
-        return;
-    }
+    event.respondWith(
+        caches.match(request).then(cachedResponse => {
+            if (cachedResponse) {
+                // Si está en caché, lo devolvemos tal cual.
+                // Si esto falla en iPhone, usaremos la red como respaldo automático.
+                return cachedResponse;
+            }
+            return fetch(request);
+        }).catch(() => fetch(request)) // Si hay cualquier error con la caché, intenta red.
+    );
+    return;
+}
 
     // 3. RESTO DE ARCHIVOS (Cache First)
     event.respondWith(

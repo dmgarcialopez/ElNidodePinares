@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'elnido-pinares-v4.0.0';
+const CACHE_NAME = 'ENDP.1.0.0';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -132,37 +132,26 @@ function enviarMensaje(texto) {
     });
 }
 
-// UN SOLO EVENTO DE INSTALACIÓN (FUSIONADO)
 self.addEventListener('install', event => {
-    // 1. Forzamos a que el nuevo SW tome el mando
     self.skipWaiting(); 
-    
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            console.log('Iniciando instalación de El Nido v3...');
-            
-            // 2. Descarga secuencial de archivos (evita bloqueos de red)
             for (const url of assets) {
                 try {
                     await cache.add(url);
-                    // console.log(`✅ Guardado: ${url}`);
                 } catch (err) {
                     console.warn(`⚠️ Error al guardar: ${url}`, err);
                 }
             }
-            
-            // 3. UNA VEZ TERMINADO TODO, enviamos el mensaje a la UI
-            console.log('Caché completada con éxito.');
             enviarMensaje("📲 App lista para usar offline");
         })
     );
 });
 
-// EVENTO DE ACTIVACIÓN
 self.addEventListener('activate', event => {
     event.waitUntil(
         Promise.all([
-            self.clients.claim(), // <--- ESTO ES VITAL: Toma el control de la web ya mismo
+            self.clients.claim(),
             caches.keys().then(keys => {
                 return Promise.all(
                     keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
@@ -172,42 +161,45 @@ self.addEventListener('activate', event => {
     );
 });
 
-// EVENTO FETCH (Mantén tu lógica de Google Sheets que es correcta)
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // ESTRATEGIA PARA GOOGLE SHEETS
-    if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
-        event.respondWith(
-            fetch(request)
-                .then(response => {
+// ESTRATEGIA PARA GOOGLE SHEETS (Manejo de Redirecciones 307)
+if (url.hostname.includes('docs.google.com') || url.hostname.includes('spreadsheets.google.com')) {
+    event.respondWith(
+        fetch(request, { redirect: 'follow' }) // <--- Forzamos a seguir la redirección
+            .then(response => {
+                // Si la respuesta es correcta (status 200) o es una respuesta opaca (status 0)
+                if (response.status === 200 || response.status === 0) {
                     const copy = response.clone();
                     caches.open(CACHE_NAME).then(cache => {
+                        // Guardamos la respuesta final bajo la URL original de la petición
                         cache.put(request, copy);
-                        // ENVIAR MENSAJE: Solo cuando se guarda con éxito
-                        enviarMensaje("✅ Datos de Google Sheets actualizados");
                     });
                     return response;
-                })
-                .catch(() => {
-                    // Si falla la red, intentamos sacar de caché y avisamos
-                    return caches.match(request).then(response => {
-                        if (response) {
-                            enviarMensaje("📴 Modo Offline: Usando datos guardados");
-                            return response;
-                        }
-                    });
-                })
-        );
-        return;
-    }
+                }
+                
+                // Si sigue siendo una redirección o error, intentamos buscar lo que tengamos en caché
+                return caches.match(request).then(cached => cached || response);
+            })
+            .catch(() => {
+                // OFFLINE: Retornar lo que haya en caché
+                return caches.match(request).then(response => {
+                    if (response) {
+                        enviarMensaje("📴 Datos cargados desde la memoria (Offline)");
+                        return response;
+                    }
+                });
+            })
+    );
+    return;
+}
 
-    // ESTRATEGIA PARA EL RESTO DE ARCHIVOS
+    // ESTRATEGIA PARA EL RESTO DE ARCHIVOS (Cache First)
     event.respondWith(
         caches.match(request).then(response => {
             return response || fetch(request);
         })
     );
 });
-

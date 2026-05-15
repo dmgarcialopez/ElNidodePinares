@@ -2,163 +2,638 @@
 import { state } from './state.js';
 import { mostrarPromptRuta, mostrarToast } from './ui-manager.js';
 
-// --- ESTADO ---
-let isRecording = false;    // ¿Está grabando un nuevo track?
-let autoCenter = false;     // ¿Está siguiendo la ruta (Navegación)?
-let watchIdGPS = null;      // Único proceso de lectura GPS
-let userMarker = null;      // Punto azul de posición actual
-let currentPath = [];       // Puntos de la grabación actual
-let recordingPolyline = null; 
+let isRecording = false;
+let watchId = null;
+let currentPath = [];
+let polyline = null;
+let navWakeLock = null; // <--- Nueva variable para el mapa
+let autoCenter = false; // Por defecto no nos sigue
+const ordenCapas = ['osm', 'topo', 'sat'];
+let indiceCapaActual = 0;
+let marcadorPosicionUsuario = null; // Variable global para rastrear el punto azul
+let ultimaPosicion = null; // Guardamos solo el último punto [lat, lng], no un array
+let trackActivo = null;
+let esGrabacionPrevia = false;
 
-// --- MOTOR GPS ---
+// Definimos los proveedores de mapas
+const baseLayers = {
+    'osm': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }),
+    'topo': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenTopoMap'
+    }),
+    'sat': L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        attribution: '© Google Maps'
+    })
+};
 
-function iniciarGPS() {
-    if (watchIdGPS || !navigator.geolocation) return;
-    watchIdGPS = navigator.geolocation.watchPosition(
-        (pos) => {
-            const latlng = [pos.coords.latitude, pos.coords.longitude];
-            actualizarMarcadorUsuario(latlng);
+function actualizarPuntoPosicion(point) {
+    const mapa = state.maps?.nav;
+    if (!mapa) return;
 
-            if (autoCenter && state.maps.nav) {
-                state.maps.nav.panTo(latlng);
-            }
-
-            if (isRecording) {
-                currentPath.push(latlng);
-                dibujarRutaGrabada();
-            }
-        },
-        (err) => console.error("Error GPS:", err),
-        { enableHighAccuracy: true, distanceFilter: 3 }
-    );
-}
-
-function actualizarMarcadorUsuario(latlng) {
-    if (!state.maps.nav) return;
-    if (!userMarker) {
-        userMarker = L.circleMarker(latlng, {
-            radius: 8, fillColor: '#3388ff', color: '#fff', weight: 3, opacity: 1, fillOpacity: 1
-        }).addTo(state.maps.nav);
+    // Si el marcador NO existe, lo creamos con el estilo del "puntito azul de GPS"
+    if (!marcadorPosicionUsuario) {
+        marcadorPosicionUsuario = L.circleMarker(point, {
+            radius: 8,          // Tamaño del punto central
+            fillColor: '#007FFF', // Azul brillante
+            fillOpacity: 1,
+            color: '#FFFFFF',    // Borde blanco para que resalte
+            weight: 3,          // Grosor del borde blanco
+            opacity: 1
+        }).addTo(mapa);
+        
+        // OPCIONAL: Añadirle un pulso o sombra suave debajo (Efecto GPS real)
+        marcadorPosicionUsuario.bindTooltip("", { permanent: false, direction: 'center' }); 
     } else {
-        userMarker.setLatLng(latlng);
+        // Si YA existe, simplemente lo movemos a la nueva coordenada
+        marcadorPosicionUsuario.setLatLng(point);
     }
 }
 
-// --- BOTÓN SEGUIMIENTO (NAVEGACIÓN) ---
-
-export function togglesegir() {
-    // REGLA: Si está grabando, no puede seguir
-    if (isRecording) {
-        mostrarToast("Pare la grabación para activar el seguimiento");
-        return;
-    }
-
-    const btn = document.getElementById('btn-seguir');
-    const img = btn?.querySelector('img');
-    
-    autoCenter = !autoCenter;
-    
-    if (autoCenter) {
-        iniciarGPS();
-        if (img) img.src = 'icons/Seguir.png';
-        btn.classList.add('seguimiento-active');
-        mostrarToast("Siguiendo ruta...");
-    } else {
-        if (img) img.src = 'icons/NOSeguir.png';
-        btn.classList.remove('seguimiento-active');
-        mostrarToast("Mapa libre");
-    }
-}
-
-// --- BOTÓN GRABACIÓN (RECORDING) ---
+// Variable para rastrear la capa activa actual
+let currentLayer = null;
 
 export function toggleRecording() {
     const btn = document.getElementById('btn-record');
     const img = btn?.querySelector('img');
     
     if (!isRecording) {
-        // --- ACTIVAR GRABACIÓN ---
+        // --- INTERFAZ: ACTIVAR GRABACIÓN ---
+        if (btn) btn.classList.add('recording-active');
+        if (img) img.src = 'icons/Rec.png'; // Cambia al icono de grabación activa
         
-        // 1. Si estaba siguiendo, paramos el seguimiento automáticamente
-        if (autoCenter) {
-            togglesegir(); 
-        }
+        // Ejecutamos la lógica inteligente de escenarios
+        startRecording(btn);
+    } else {
+        // --- INTERFAZ: DESACTIVAR GRABACIÓN ---
+        if (btn) btn.classList.remove('recording-active');
+        if (img) img.src = 'icons/NOREC.png'; // Volvemos al icono inicial
+        
+        // Ejecutamos la lógica de parada y guardado
+        stopRecording(btn);
+    }
+}
 
-        // 2. Lógica de continuidad: 
-        // Si currentPath ya tiene puntos (de una grabación reciente no borrada), continuamos.
-        // Si no, empezamos limpio.
-        if (currentPath.length === 0) {
-            limpiarMapaDeTracks(); // Borra tracks cargados externamente si empezamos de cero
-            mostrarToast("Grabando nueva ruta desde cero");
-        } else {
+function startRecording(btn) {
+    const mapa = window.state.maps?.nav;
+
+    // --- ESCENARIO 2: Hay una grabación previa en el mapa ---
+    if (esGrabacionPrevia && currentPath.length > 0) {
+        
+        // Creamos un diálogo de opciones para el usuario. 
+        // Nota: Al ser una PWA, puedes usar un modal personalizado de tu app. 
+        // Aquí uso un flujo de confirmaciones nativas para estructurar la lógica:
+        
+        const continuar = confirm("Tienes una grabación previa en pantalla.\n\n¿Deseas CONTINUAR grabando sobre ella?\n(Aceptar = Continuar / Cancelar = Ver más opciones)");
+        
+        if (continuar) {
+            // Opción: Continuar la grabación previa (No vaciamos currentPath)
+            esGrabacionPrevia = false; // Pasa a ser la grabación activa actual
+            ejecutarInicioGrabacion(btn);
             mostrarToast("Continuando grabación previa...");
+            return;
         }
 
-        isRecording = true;
-        iniciarGPS();
-        if (img) img.src = 'icons/Rec.png';
-        btn.classList.add('recording-active');
-    } else {
-        // --- PAUSAR/PARAR GRABACIÓN ---
-        isRecording = false;
-        if (img) img.src = 'icons/NOREC.png';
-        btn.classList.remove('recording-active');
-        mostrarToast("Grabación pausada");
+        const guardarOstart = confirm("¿Deseas GUARDAR la grabación previa en un archivo e iniciar una nueva?\n(Aceptar = Guardar y empezar nueva / Cancelar = Borrar y empezar nueva)");
+        
+        if (guardarOstart) {
+            // Opción: Guardar (Ya se guardó en el LocalStorage al hacer stop, así que solo limpiamos mapa y empezamos)
+            limpiarMapaCompleto();
+            currentPath = [];
+            esGrabacionPrevia = false;
+            ejecutarInicioGrabacion(btn);
+            return;
+        } else {
+            // Opción: Borrar y empezar de nuevo
+            limpiarMapaCompleto();
+            currentPath = [];
+            esGrabacionPrevia = false;
+            ejecutarInicioGrabacion(btn);
+            return;
+        }
+    }
+
+    // --- ESCENARIO 1: Hay un track externo cargado (KML/GPX) ---
+    if (trackActivo && mapa) {
+        limpiarMapaCompleto();
+        currentPath = [];
+        esGrabacionPrevia = false;
+        ejecutarInicioGrabacion(btn);
+        return;
+    }
+
+    // --- ESCENARIO 3: El mapa está limpio ---
+    currentPath = [];
+    esGrabacionPrevia = false;
+    ejecutarInicioGrabacion(btn);
+}
+
+// Función interna auxiliar que arranca el proceso del GPS
+function ejecutarInicioGrabacion(btn) {
+    isRecording = true;
+    
+    // Forzamos el autocentrado para que el mapa acompañe al usuario
+    autoCenter = true; 
+
+    if (btn) btn.classList.add('recording-active');
+
+    if (navigator.geolocation) {
+        // Obtenemos la primera posición de inmediato para CENTRAR EL MAPA AL INSTANTE
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const point = [pos.coords.latitude, pos.coords.longitude];
+                
+                // Centramos el mapa de golpe en la ubicación actual
+                if (window.state.maps?.nav) {
+                    window.state.maps.nav.setView(point, 16); // Centra con un zoom cercano (16) ideal para rutas
+                }
+                
+                // Guardamos el primer punto e inicializamos el dibujo
+                currentPath.push(point);
+                actualizarMapa(point);
+                
+                // Una vez centrado el mapa inicial, encendemos el 'watchPosition' para el movimiento continuo
+                activarSeguimientoContinuo();
+            },
+            (err) => {
+                console.error("Error al centrar GPS inicial:", err);
+                // Si falla el centrado inicial por timeout, intentamos activar el continuo de todos modos
+                activarSeguimientoContinuo();
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+        
+        mostrarToast("Localizando posición e iniciando grabación...");
     }
 }
 
-// --- UTILIDADES DE MAPA ---
+// Función auxiliar para mantener limpio el código del watchPosition
+function activarSeguimientoContinuo() {
+    if (watchId) navigator.geolocation.clearWatch(watchId);
 
-function dibujarRutaGrabada() {
-    if (!state.maps.nav) return;
-    if (!recordingPolyline) {
-        recordingPolyline = L.polyline(currentPath, {
-            color: '#2e7d32', // Verde corporativo de El Nido
-            weight: 6
-        }).addTo(state.maps.nav);
-    } else {
-        recordingPolyline.setLatLngs(currentPath);
-    }
+    watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const point = [pos.coords.latitude, pos.coords.longitude];
+            currentPath.push(point);
+            
+            // actualizarMapa pinta la línea y, como 'autoCenter' es true, 
+            // ejecutará internamente el: state.maps.nav.panTo(point)
+            actualizarMapa(point); 
+        },
+        (err) => console.error("Error GPS continuo:", err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
 }
 
-function limpiarMapaDeTracks() {
-    const mapa = state.maps.nav;
+// Función auxiliar para dejar el mapa totalmente limpio de rutas
+function limpiarMapaCompleto() {
+    const mapa = window.state.maps?.nav;
     if (!mapa) return;
-    mapa.eachLayer(l => {
-        // Borramos polilíneas (tracks) y capas GPX/KML externas
-        if (l instanceof L.Polyline || l instanceof L.GPX || (window.L.KML && l instanceof L.KML)) {
-            mapa.removeLayer(l);
+
+    // 1. Limpieza de las variables de referencia
+    if (trackActivo) {
+        mapa.removeLayer(trackActivo);
+        trackActivo = null;
+    }
+
+    if (polyline) {
+        mapa.removeLayer(polyline);
+        polyline = null;
+    }
+
+    // 2. LIMPIEZA TOTAL (Barrido de seguridad)
+    // Esto recorre todas las capas del mapa y borra cualquier Polyline, GPX o KML 
+    // que se haya quedado "huérfana" o sin variable asignada.
+    mapa.eachLayer(layer => {
+        if (layer instanceof L.Polyline || 
+            (L.GPX && layer instanceof L.GPX) || 
+            (L.KML && layer instanceof L.KML)) {
+            mapa.removeLayer(layer);
         }
     });
-    recordingPolyline = null;
+
+    // 3. Resetear el array de puntos para que no queden coordenadas guardadas
+    currentPath = [];
+}
+
+
+function iniciarSeguimientoGPS() {
+    if (navigator.geolocation) {
+        if (watchId !== null) return; 
+
+        watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                const point = [pos.coords.latitude, pos.coords.longitude];
+                ultimaPosicion = point; // Guardamos la última para el toggle
+                
+                // 1. Movemos SOLO el puntito azul (sin pintar líneas)
+                actualizarPuntoPosicion(point);
+                
+                // 2. Si el autocentrado está activo, movemos el mapa
+                if (autoCenter && state.maps && state.maps.nav) {
+                    state.maps.nav.panTo(point);
+                }
+            },
+            (err) => console.error("Error GPS:", err),
+            { 
+                enableHighAccuracy: true, 
+                timeout: 10000,       
+                maximumAge: 0         
+            }
+        );
+    }
+}
+
+function detenerSeguimientoGPS() {
+    if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+    // Si quieres borrar el punto azul al apagar el GPS:
+    if (marcadorPosicionUsuario) {
+        marcadorPosicionUsuario.remove();
+        marcadorPosicionUsuario = null;
+    }
+}
+
+function actualizarMapa(point) {
+    if (!state.maps.nav) return;
+
+    if (!polyline) {
+        // AZUL CIAN ELÉCTRICO (Máximo brillo)
+        polyline = L.polyline(currentPath, {
+            color: '#007FFF',    // Cian eléctrico puro
+            weight: 8,           // Un pelín más grueso para ganar presencia
+            opacity: 1,          // Sin transparencia para que brille más
+            lineJoin: 'round',
+            lineCap: 'round',
+            shadowBlur: 5,       // Añadimos una pequeña sombra para efecto neón
+            shadowColor: '#007FFF' 
+        }).addTo(state.maps.nav);
+    } else {
+        polyline.setLatLngs(currentPath);
+    }
+
+    if (autoCenter) {
+        state.maps.nav.panTo(point);
+    }
+}
+
+function stopRecording(btn) {
+    isRecording = false;
+    if (btn) {
+        btn.classList.remove('recording-active');
+        btn.style.backgroundColor = ''; 
+    }
+    
+    if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null; // Buenas prácticas: resetear el ID
+    }
+    
+    // Cambiamos el estado: ahora lo que queda en el mapa es una grabación previa activa
+    if (currentPath.length > 0) {
+        esGrabacionPrevia = true; 
+        
+        const historico = JSON.parse(localStorage.getItem('rutas_guardadas') || '[]');
+        historico.push({
+            fecha: new Date().toISOString(),
+            puntos: currentPath
+        });
+        localStorage.setItem('rutas_guardadas', JSON.stringify(historico));
+        mostrarToast("Ruta finalizada y guardada en el historial.");
+    } else {
+        mostrarToast("Grabación finalizada (sin datos).");
+    }
 }
 
 export function finalizarYExportar() {
     if (currentPath.length < 2) {
-        mostrarToast("No hay ruta suficiente para guardar");
+        mostrarToast("No hay ruta que guardar.");
         return;
     }
 
-    mostrarPromptRuta("Mi Ruta en Navaleno", (nombre) => {
-        const gpx = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="El Nido"><trk><name>${nombre}</name><trkseg>${currentPath.map(p => `<trkpt lat="${p[0]}" lon="${p[1]}"></trkpt>`).join('')}</trkseg></trk></gpx>`;
-        
-        const blob = new Blob([gpx], {type: 'application/gpx+xml'});
+    const ahora = new Date();
+    const aa = ahora.getFullYear().toString().slice(-2);
+    const mm = (ahora.getMonth() + 1).toString().padStart(2, '0');
+    const dd = ahora.getDate().toString().padStart(2, '0');
+    const hh = ahora.getHours().toString().padStart(2, '0'); // Añadido: definición de hh
+    const min = ahora.getMinutes().toString().padStart(2, '0'); // Añadido: definición de min
+    
+    const nombrePorDefecto = `TRACK${aa}${mm}${dd}${hh}${min}`;
+
+    mostrarPromptRuta(nombrePorDefecto, (nombreRuta) => {
+        if (isRecording) toggleRecording();
+
+        const gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="El Nido de Pinares" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>${nombreRuta}</name>
+    <trkseg>
+      ${currentPath.map(p => `<trkpt lat="${p[0]}" lon="${p[1]}"></trkpt>`).join('\n      ')}
+    </trkseg>
+  </trk>
+</gpx>`;
+
+        const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${nombre}.gpx`;
-        link.click();
+        const fileName = nombreRuta.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         
-        // Tras exportar, vaciamos para que la siguiente sí sea "de cero"
+        link.href = url;
+        link.download = `${fileName}.gpx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        if (polyline) { state.maps.nav.removeLayer(polyline); polyline = null; }
         currentPath = [];
-        if (recordingPolyline) state.maps.nav.removeLayer(recordingPolyline);
-        recordingPolyline = null;
-        mostrarToast("Ruta guardada correctamente");
+        mostrarToast(`Ruta ${nombreRuta} guardada.`);
     });
 }
 
-// ... Resto de funciones (ciclarCapas, etc.) se mantienen igual ...
+// LÓGICA DE CAMBIO DE CAPAS REAL
+export function changeBaseLayer(layerType) {
+    const mapa = state.maps.nav;
+    if (!mapa) return;
 
-window.togglesegir = togglesegir;
+    // 1. Quitar la capa que esté puesta actualmente
+    // Leaflet permite iterar sobre las capas para encontrar el TileLayer
+    mapa.eachLayer((layer) => {
+        if (layer instanceof L.TileLayer) {
+            mapa.removeLayer(layer);
+        }
+    });
+
+    // 2. Añadir la nueva
+    currentLayer = baseLayers[layerType];
+    currentLayer.addTo(mapa);
+    
+    // 3. Cerrar menú
+    const menu = document.getElementById('map-selector');
+    if (menu) menu.classList.add('hidden');
+    
+    console.log("Capa cambiada a:", layerType);
+}
+
+// EXPOSICIÓN GLOBAL
 window.toggleRecording = toggleRecording;
 window.finalizarYExportar = finalizarYExportar;
+window.changeBaseLayer = changeBaseLayer;
+window.toggleMapMenu = function() {
+    const menu = document.getElementById('map-selector');
+    if (menu) menu.classList.toggle('hidden');
+};
+
+export function seleccionarTrack() {
+    // 1. Creamos el input invisible en memoria
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.gpx,.kml';
+
+    fileInput.onchange = (evento) => {
+        const archivo = evento.target.files[0];
+        if (!archivo) return; 
+
+        // 2. Extraemos la extensión real del archivo (.gpx o .kml)
+        const ext = archivo.name.split('.').pop().toLowerCase();
+
+        // 3. Creamos la URL temporal del archivo
+        let urlBlob = URL.createObjectURL(archivo);
+
+        // 4. TRUCO: Le pegamos la extensión al final de la URL (ej: blob:http...#file.gpx)
+        // Así tu función `cargarTrackExterno` podrá detectar si es GPX o KML usando tu código actual
+        urlBlob = `${urlBlob}#file.${ext}`;
+
+        // 5. Se lo pasamos a tu función para que lo dibuje y lo centre en el mapa
+        cargarTrackExterno(urlBlob);
+        
+        if (typeof mostrarToast === 'function') {
+            mostrarToast(`Cargando: ${archivo.name}`);
+        }
+    };
+
+    // Apuntamos el clic al explorador de archivos nativo
+    fileInput.click();
+}
+
+window.seleccionarTrack = seleccionarTrack;
+
+export function cargarTrackExterno(url) {
+    if (!url) return;
+
+    // 1. Asegurar mapa y label
+    if (!window.state.maps.nav) {
+        window.state.maps.nav = L.map('nav-map', { 
+            zoomControl: false,
+            dragging: true,
+            touchZoom: true
+        }).setView([41.828, -3.005], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(window.state.maps.nav);
+    }
+
+    const mapa = window.state.maps.nav;
+    const label = document.getElementById('track-name');
+
+    // Limpieza total de rutas previas
+    mapa.eachLayer(l => {
+        if (l instanceof L.Polyline || (window.L.KML && l instanceof L.KML) || l instanceof L.GPX) {
+            mapa.removeLayer(l);
+        }
+    });
+
+    // Despertar el mapa
+    setTimeout(() => mapa.invalidateSize(), 200);
+
+    // 2. EXTRAER NOMBRE (Priorizando el contenido de la ruta sobre el nombre del hotel)
+    fetch(url)
+        .then(r => r.text())
+        .then(strData => {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(strData, "text/xml");
+            
+            // BUSQUEDA SELECTIVA:
+            // Intentamos encontrar el name dentro de Placemark (la ruta)
+            // Si no hay, buscamos el name dentro de Folder
+            // Si no hay, buscamos cualquier name
+            const nombreRuta = xmlDoc.querySelector('Placemark > name')?.textContent;
+            const nombreCarpeta = xmlDoc.querySelector('Folder > name')?.textContent;
+            const nombreCualquiera = xmlDoc.querySelector('name')?.textContent;
+            
+            let nombreFinal = nombreRuta || nombreCarpeta || nombreCualquiera;
+            
+            if (!nombreFinal) {
+                nombreFinal = url.split('/').pop().replace(/\.(gpx|kml)$/i, '').replace(/[-_]/g, ' ');
+            }
+
+            if (label) label.innerText = nombreFinal.trim();
+        })
+        .catch(e => console.log("Error extrayendo nombre:", e));
+
+    // 3. CARGAR EN EL MAPA (Usamos la URL para evitar errores de objeto)
+    const ext = url.split('.').pop().toLowerCase();
+
+    if (ext === 'kml') {
+        const trackKml = new L.KML(url); 
+        mapa.addLayer(trackKml);
+        trackActivo = trackKml;
+
+        trackKml.on("loaded", () => {
+            const bounds = trackKml.getBounds();
+            if (bounds.isValid()) {
+                mapa.fitBounds(bounds, { padding: [40, 40] });
+            }
+        });
+        
+        // Refuerzo para asegurar el encuadre
+        setTimeout(() => {
+            const bounds = trackKml.getBounds();
+            if (bounds.isValid()) mapa.fitBounds(bounds, { padding: [40, 40] });
+        }, 600);
+
+    } else {
+        const gpxTrack = new L.GPX(url, {
+            parseElements: ['track'],
+            polyline_options: { color: '#007FFF', weight: 6, opacity: 0.8 },
+            marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null, wptIconUrls: {} }
+        });
+        trackActivo = gpxTrack;
+
+        gpxTrack.on('loaded', e => {
+            const bounds = e.target.getBounds();
+            if (bounds.isValid()) {
+                mapa.fitBounds(bounds, { padding: [40, 40] });
+            }
+        });
+
+        gpxTrack.addTo(mapa);
+    }
+}
+
+window.cargarTrackExterno = cargarTrackExterno;
+
+function asegurarMapaInicializado() {
+    if (window.state.maps.nav) return;
+
+    const mapContainer = document.getElementById('nav-map');
+    if (!mapContainer) return;
+
+    console.log("Inicializando contenedor de mapa...");
+
+    // Limpiamos el rastro de Leaflet si hubiera quedado algo
+    if (mapContainer._leaflet_id) {
+        mapContainer._leaflet_id = null;
+    }
+
+    try {
+        window.state.maps.nav = L.map('nav-map', {
+            zoomControl: false,
+            dragging: true,
+            zoomAnimation: true
+        }).setView([41.828, -3.005], 14);
+
+        // Añadimos la capa base inmediatamente
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(window.state.maps.nav);
+
+        console.log("Mapa de navegación listo.");
+        requestWakeLock();
+    } catch (e) {
+        console.error("Error al crear el mapa:", e);
+    }
+}
+
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try { 
+            navWakeLock = await navigator.wakeLock.request('screen'); 
+            console.log("Pantalla bloqueada para navegación");
+        } catch (e) {
+            console.error("Fallo al bloquear pantalla:", e);
+        }
+    }
+}
+
+export function toggleseguir() {
+    const btn = document.getElementById('btn-seguir');
+    const img = btn?.querySelector('img');
+
+    autoCenter = !autoCenter;
+
+    if (autoCenter) {
+        // --- MODO SEGUIMIENTO ACTIVO ---
+        if (img) img.src = 'icons/Seguir.png'; 
+        
+        iniciarSeguimientoGPS();
+        
+        if (ultimaPosicion && window.state.maps.nav) {
+            window.state.maps.nav.panTo(ultimaPosicion);
+        }
+        
+        mostrarToast("Seguimiento GPS activado");
+    } else {
+        // --- MODO LIBRE ---
+        if (img) img.src = 'icons/NOSeguir.png'; 
+        
+        // 1. Apagamos el GPS y quitamos el punto azul
+        detenerSeguimientoGPS();
+        
+        // 2. Centramos el mapa sobre el track guardado en la variable global
+        const mapa = window.state.maps?.nav;
+        if (trackActivo && mapa) {
+            const bounds = trackActivo.getBounds();
+            
+            // Verificamos que los límites sean válidos antes de encuadrar
+            if (bounds.isValid()) {
+                mapa.fitBounds(bounds, {
+                    padding: [50, 50],
+                    maxZoom: 16
+                });
+                mostrarToast("Mapa libre: mostrando ruta completa");
+            } else {
+                mostrarToast("Mapa libre: explora la ruta");
+            }
+        } else {
+            mostrarToast("Mapa libre: explora la ruta");
+        }
+    }
+}
+
+// Hacerlo disponible para el onclick del HTML
+window.togglesegir = toggleseguir;
+
+export function ciclarCapas() {
+    const mapa = state.maps.nav;
+    if (!mapa) return;
+
+    // Aumentamos el índice y volvemos a 0 si llegamos al final
+    indiceCapaActual = (indiceCapaActual + 1) % ordenCapas.length;
+    const tipo = ordenCapas[indiceCapaActual];
+
+    // 2. Limpiamos capas previas
+    mapa.eachLayer((layer) => {
+        if (layer instanceof L.TileLayer) {
+            mapa.removeLayer(layer);
+        }
+    });
+
+    // 3. Añadimos la nueva capa
+    const nuevaCapa = baseLayers[tipo];
+    nuevaCapa.addTo(mapa);
+
+    // 4. Feedback visual al usuario
+    const nombres = { 'osm': 'Callejero', 'topo': 'Montaña', 'sat': 'Satélite' };
+}
+
+// No olvides exponerla al window
+window.ciclarCapas = ciclarCapas;
+
+
+
+
+
 

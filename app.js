@@ -50,7 +50,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btn-pois')?.addEventListener('click', () => { UI.showMap('pois'); });
     document.getElementById('btn-bici')?.addEventListener('click', () => { UI.renderBiciList(); });
     document.getElementById('btn-walk')?.addEventListener('click', () => { UI.renderPaseoList(); });
-    document.getElementById('btn-game')?.addEventListener('click', () => { UI.showScreen('game'); Game.initGame(); });
+    document.getElementById('btn-game')?.addEventListener('click', () => { 
+    // 1. Muestra la pantalla primero
+    UI.showScreen('game'); 
+    
+    // 2. Inicializa el juego
+    Game.initGame(); 
+
+    // 3. AGREGADO: Forzar a Leaflet a recalcular el tamaño correcto 
+    // cuando la pantalla ya esté visible en el DOM
+    setTimeout(() => {
+        // NOTA: Asegúrate de que 'Game.map' sea la variable donde guardas el mapa de Leaflet.
+        // Si en tu objeto Game lo llamaste de otra forma (ej. Game.mapa o Game.leafletMap), cámbialo aquí:
+        if (Game.map && typeof Game.map.invalidateSize === 'function') {
+            Game.map.invalidateSize();
+        }
+    }, 200); // 200 milisegundos de delay son suficientes para que la UI se asiente
+    });
     document.getElementById('btn-nav')?.addEventListener('click', ()  => { UI.showScreen('nav');});
 
     // 3. CONEXIÓN DE PANTALLAS INTERNAS

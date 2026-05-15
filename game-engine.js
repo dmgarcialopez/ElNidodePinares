@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import * as UI from './ui-manager.js';
+import * as Data from './data-service.js'; // Importación necesaria para getVideoUrl
 
 // --- INICIO DEL JUEGO ---
 export async function initGame() {
@@ -19,12 +20,13 @@ export async function initGame() {
 // --- GEOLOCALIZACIÓN ---
 function requestLocation() {
     if (navigator.geolocation) {
+        // Cambiamos a getCurrentPosition para que llame a nuestra función async
         navigator.geolocation.getCurrentPosition(updateGameStatus, null, { enableHighAccuracy: true });
     }
 }
 
 // --- LÓGICA PRINCIPAL (Radar y Duendes) ---
-function updateGameStatus(pos) {
+async function updateGameStatus(pos) {
     const { latitude: uLat, longitude: uLng } = pos.coords;
     state.game.userCoords = { lat: uLat, lng: uLng }; 
 
@@ -84,21 +86,40 @@ function updateGameStatus(pos) {
         const closest = duendesDisponibles[closestIdx];
         name.innerText = closest[0];
 
+        let videoNombre = "Radar"; // Por defecto el radar
+        
         if (state.game.lastDistance < state.game.CAPTURE_RANGE) {
             info.innerText = "¡Duende a la Vista!";
-            const tipo = closest[4] ? closest[4].trim() : "Radar";
-            if (!video.src.includes(tipo)) {
-                video.src = `videos/${tipo}.mp4`;
-                video.play().catch(()=>{});
-            }
+            videoNombre = closest[4] ? closest[4].trim() : "Radar";
             container.onclick = () => capturar(closest);
         } else {
             info.innerText = `Duende a ${Math.round(state.game.lastDistance)}m`;
-            if (!video.src.includes("Radar")) {
-                video.src = "videos/Radar.mp4";
-                video.play().catch(()=>{});
-            }
             container.onclick = null;
+        }
+
+        // --- LÓGICA INDEXEDDB PARA VÍDEO ---
+        // Solo cambiamos el src si el video es diferente al que ya se está reproduciendo
+        if (!video.dataset.currentType || video.dataset.currentType !== videoNombre) {
+            try {
+                // Obtenemos la URL del Blob desde nuestro servicio de datos
+                const blobUrl = await Data.getVideoUrl(videoNombre);
+                
+                if (blobUrl) {
+                    // Liberamos la memoria de la URL anterior si era un Blob (evita fugas de memoria)
+                    if (video.src.startsWith('blob:')) {
+                        URL.revokeObjectURL(video.src);
+                    }
+                    video.src = blobUrl;
+                    video.dataset.currentType = videoNombre; // Marcamos qué estamos reproduciendo
+                    video.play().catch(()=>{});
+                } else {
+                    // Fallback: Si por alguna razón no está en IndexedDB, intentar ruta normal
+                    video.src = `videos/${videoNombre}.mp4`;
+                }
+            } catch (err) {
+                console.error("Error cargando video de IndexedDB:", err);
+                video.src = `videos/${videoNombre}.mp4`;
+            }
         }
     }
 
@@ -111,20 +132,16 @@ function capturar(duende) {
     state.game.captured.push(duende);
     localStorage.setItem('duendesCapturados', JSON.stringify(state.game.captured));
     UI.mostrarToast("¡Has capturado a " + duende[0] + "!");
-    requestLocation(); // Refrescar inmediatamente
+    refresh(); // Usamos refresh para forzar actualización inmediata
 }
 
 /**
  * Fuerza una actualización inmediata del radar y el mapa.
- * Útil cuando se liberan duendes desde el álbum.
  */
 export function refresh() {
-    // Si hay un temporizador en marcha, lo cancelamos para no duplicar procesos
     if (state.game.timer) {
         clearTimeout(state.game.timer);
     }
-    // Pedimos la ubicación de nuevo, lo que disparará updateGameStatus
-    // y filtrará los duendes según la lista de capturados actualizada.
     requestLocation();
 }
 
@@ -141,4 +158,3 @@ async function requestWakeLock() {
         try { state.game.wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
     }
 }
-

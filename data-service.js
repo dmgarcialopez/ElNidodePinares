@@ -17,6 +17,13 @@ export async function initDB() {
     });
 }
 
+export async function getVideoUrl(videoName) {
+    // Buscamos el archivo en IndexedDB usando la ruta que usamos en la sincronización
+    const blob = await getFile(`/videos/${videoName}.mp4`);
+    if (!blob) return null;
+    return URL.createObjectURL(blob);
+}
+
 export async function saveFile(key, blob) {
     const db = await initDB();
     return new Promise((resolve, reject) => {

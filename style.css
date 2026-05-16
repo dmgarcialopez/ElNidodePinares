@@ -1,0 +1,188 @@
+/* --- 1. CONFIGURACIÓN BASE (Tu original) --- */
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body, html {
+    width: 100%; height: 100%;
+    background: #4e342e url('icons/wood.png') no-repeat center center fixed;
+    background-size: cover;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: white; overflow: hidden;
+}
+
+#app { width: 100%; max-width: 450px; margin: 0 auto; height: 100%; position: relative; }
+
+/* --- 2. HEADER --- */
+header { padding: 25px 15px 15px; }
+.header-container { display: flex; align-items: center; justify-content: center; gap: 15px; }
+.logo { width: 80px; height: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); flex-shrink: 0; }
+.header-text { display: flex; flex-direction: column; }
+h1 { font-size: 26px; font-weight: bold; margin: 0; text-shadow: 2px 2px 4px black; line-height: 1.1; text-align: center;}
+h2 { font-size: 20px; font-weight: bold; margin: 0; text-shadow: 2px 2px 4px black; line-height: 1.1; text-align: center;}
+h3 { font-size: 20px; color: #aed581; font-weight: bold; margin: 0; text-shadow: 2px 2px 4px black; line-height: 1.1; text-align: center;}
+h4 { font-size: 16px; color: #aed581; text-shadow: 1px 1px 2px black; text-align: center; }
+
+/* --- 3. MENU PRINCIPAL (Botones 75px) --- */
+.menu-principal { width: 100%; display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
+.bloque-grid { display: grid; grid-template-columns: repeat(3, 75px); gap: 15px; margin-bottom: 15px; }
+.bloque-flex { display: flex; gap: 15px; margin-bottom: 15px; }
+.btn-circle { width: 75px; height: 75px; background: none; border: none; cursor: pointer; padding: 0; transition: transform 0.1s; }
+.btn-circle:active { transform: scale(0.92); }
+.btn-circle img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)); }
+
+/* EL MARCO MAESTRO */
+.nav-container {
+    width: 100%;
+    height: 95%;
+    max-width: 500px;
+    margin: 0 auto;        /* Esto centra el bloque entero en la pantalla */
+    display: flex;
+    flex-direction: column;
+    align-items: center;  /* Esto obliga a los hijos (mapa) a estirarse al ancho total */
+}
+
+/* EL MAPA: Ahora heredará el ancho del contenedor */
+#nav-map {
+    width: 100% !important;
+    height: 75%;           /* O el alto que prefieras */
+    margin: 0 !important;   /* Elimina cualquier margen residual */
+    padding: 0 !important;
+    display: block;         /* Evita espacios extra de elementos en línea */
+    clear: both;
+}
+
+/* Forzamos que Leaflet use todo el espacio disponible */
+.leaflet-container {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* LA BOTONERA: Se ajustará automáticamente al mismo ancho */
+.nav-row-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    width: 100%;
+    padding: 15px 0;
+    gap: 5px;
+    justify-items: center;
+}
+
+.btn-circle1 {
+    width: 50px !important;
+    height: 50px !important;
+    background: none !important;
+    border: none !important;
+    padding: 0;
+}
+
+.btn-circle1 img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.mic-container { margin-top: 5px; text-align: center; }
+#mic-status { font-size: 13px; font-weight: bold; color: white; margin-top: 8px; height: 18px; text-shadow: 1px 1px 2px black; }
+
+/* --- 4. PANTALLAS --- */
+.screen {width: 100%;height: 100vh;overflow: hidden;position: relative;
+}
+.hidden { display: none !important; }
+
+#map-container { width: 100%; height: 100vh; z-index: 1; }
+#list-container { padding: 60px 15px 20px; height: 100vh; overflow-y: auto; background: rgba(0,0,0,0.4); }
+
+/* --- 5. LISTAS (Grandes y Horizontales) --- */
+.lista-titulo { text-align: center; margin-bottom: 25px; text-shadow: 2px 2px 4px black; font-size: 24px; }
+.lista-item {
+    background: rgba(255, 255, 255, 0.9);
+    color: #333;
+    padding: 15px 15px;
+    border-radius: 15px; 
+    margin-bottom: 15px;
+    display: flex; 
+    flex-direction: row; /* FUERZA LOS ICONOS A LA IZQUIERDA */
+    align-items: center; 
+    gap: 15px; 
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    min-height: 85px;
+}
+.lista-acciones-left { display: flex; gap: 12px; flex-shrink: 0; align-items: center; }
+.btn-accion { background: none; border: none; padding: 0; cursor: pointer; width: 45px; height: 45px; }
+.btn-accion img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.lista-info { flex-grow: 1; cursor: pointer; padding-left: 5px; }
+.lista-info span { font-weight: bold; font-size: 1.2em; color: #1b5e20; line-height: 1.2; display: block; }
+
+/* --- 6. JUEGO DUENDES (Intacto) --- */
+#game-screen { background: #3e2723 url('icons/wood.png'); display: flex; flex-direction: column; align-items: center; }
+#game-header { height: 80px; text-align: center; padding-top: 10px; color: white; width: 100%; background: rgba(0,0,0,0.5); }
+#closest-info { font-size: 24px; font-weight: bold; }
+#duende-name { font-size: 18px; opacity: 0.9; }
+#game-map { width: 100%; height: 45vh; border-top: 2px solid #222; border-bottom: 2px solid #222; }
+#game-controls { display: flex; justify-content: space-around; align-items: center; width: 100%; padding: 20px 10px; }
+#video-container { width: 180px; height: 180px; border: 15px solid #000; background: #000; overflow: hidden; border-radius: 20px; }
+/* Contenedor principal de la pantalla del juego */
+.game-flex-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;          /* Fuerza a la pantalla a medir exactamente el alto del dispositivo */
+    width: 100%;
+    overflow: hidden;       /* Evita que aparezca la barra de scroll general */
+    justify-content: space-between;
+}
+
+/* El mapa se estira para rellenar el hueco, pero respeta a los demás */
+.game-map-flush {
+    flex: 1;                /* Esto le dice al mapa: "ocupa todo el espacio que sobre" */
+    width: 100%;
+    min-height: 200px;      /* Evita que el mapa colapse por completo en pantallas muy pequeñas */
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+#game-video { width: 100%; height: 100%; object-fit: cover; }
+
+/* --- 7. MÓDULO NAVEGACIÓN GPS --- */
+#nav-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* Recuperamos el fondo de madera original */
+    background: #4e342e url('icons/wood.png') no-repeat center center fixed;
+    background-size: cover;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Centra el contenido en PC */
+}
+
+/* El contenedor del mapa ahora tiene un margen para que se vea la madera */
+#nav-map {
+    width: 95%; /* Deja ver un poco de fondo a los lados */
+    max-width: 450px; /* En PC se verá como un móvil, en móvil ocupará casi todo */
+    flex: 1;
+    margin-top: 20px;
+    border: 3px solid #3e2723; /* Un marco marrón oscuro */
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    background: #4e342e url('icons/wood.png') no-repeat center center fixed;
+}
+
+.nav-controls-wrapper {
+    width: 100%;
+    max-width: 450px;
+    height: 100px;
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    padding-bottom: 20px;
+    background: transparent; /* Para que se vea la madera abajo también */
+}
+
+/* --- 8. DIÁLOGOS Y TOASTS --- */
+#toast-aviso {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: rgba(27, 94, 32, 0.9); color: white; padding: 12px 25px;
+    border-radius: 25px; z-index: 10000; font-weight: bold;
+}
+
+

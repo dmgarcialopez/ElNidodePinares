@@ -1,6 +1,6 @@
 // js/nav-engine.js
 import { state } from './state.js';
-import { mostrarPromptRuta, mostrarToast } from './ui-manager.js';
+import { mostrarPromptRuta, mostrarToast, mostrarSelectorEscenarioRuta } from './ui-manager.js';
 
 let isRecording = false;
 let watchId = null;
@@ -318,10 +318,10 @@ export function finalizarYExportar() {
     const aa = ahora.getFullYear().toString().slice(-2);
     const mm = (ahora.getMonth() + 1).toString().padStart(2, '0');
     const dd = ahora.getDate().toString().padStart(2, '0');
-    const hh = ahora.getHours().toString().padStart(2, '0'); // Añadido: definición de hh
-    const min = ahora.getMinutes().toString().padStart(2, '0'); // Añadido: definición de min
+    const hh = ahora.getHours().toString().padStart(2, '0');
     
-    const nombrePorDefecto = `TRACK${aa}${mm}${dd}${hh}${min}`;
+    // 1. CAMBIO: Ahora el valor por defecto en la pantalla es solo "TRACK"
+    const nombrePorDefecto = "TRACK";
 
     mostrarPromptRuta(nombrePorDefecto, (nombreRuta) => {
         if (isRecording) toggleRecording();
@@ -339,10 +339,15 @@ export function finalizarYExportar() {
         const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        const fileName = nombreRuta.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        
+        // Limpiamos el nombre que introdujo el usuario de caracteres raros
+        const nombreLimpio = nombreRuta.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        
+        // 2. CAMBIO: Formateamos el nombre del fichero final como AAMMDDHH<Nombre>
+        const nombreFicheroFinal = `${aa}${mm}${dd}${hh}${nombreLimpio}`;
         
         link.href = url;
-        link.download = `${fileName}.gpx`;
+        link.download = `${nombreFicheroFinal}.gpx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -388,10 +393,12 @@ window.toggleMapMenu = function() {
 };
 
 export function seleccionarTrack() {
-    // 1. Creamos el input invisible en memoria
+   // 1. Creamos el input invisible en memoria
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.gpx,.kml';
+    
+    // Configuración estricta para móviles (Extensiones + Tipos MIME)
+    fileInput.accept = '.gpx,.kml,application/gpx+xml,application/vnd.google-earth.kml+xml';
 
     fileInput.onchange = (evento) => {
         const archivo = evento.target.files[0];

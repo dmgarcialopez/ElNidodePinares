@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.0.11';
+const CACHE_NAME = 'ENDP.1.1.0';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [

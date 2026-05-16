@@ -10,6 +10,36 @@ export function mostrarToast(msg) {
     setTimeout(() => t.classList.add('hidden'), 4000);
 }
 
+export function mostrarSelectorEscenarioRuta(mensaje, callbackSeleccion) {
+    const modal = document.getElementById('custom-scenario-modal');
+    const texto = document.getElementById('scenario-text');
+    const btnContinuar = document.getElementById('scenario-btn-continuar');
+    const btnGuardar = document.getElementById('scenario-btn-guardar');
+    const btnBorrar = document.getElementById('scenario-btn-borrar');
+
+    if (!modal || !texto) return;
+
+    texto.innerText = mensaje;
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+
+    // Función auxiliar para cerrar limpiando eventos
+    const cerrar = (opcion) => {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+        if (typeof callbackSeleccion === 'function') callbackSeleccion(opcion);
+    };
+
+    // Asignamos las acciones limpiando registros previos
+    btnContinuar.onclick = () => cerrar('continuar');
+    btnGuardar.onclick = () => cerrar('guardar');
+    btnBorrar.onclick = () => cerrar('borrar');
+}
+
+// Lo exponemos de forma global para que nav-engine lo pueda ejecutar
+window.mostrarSelectorEscenarioRuta = mostrarSelectorEscenarioRuta;
+
+
 export function toggleMapMenu() {
     const menu = document.getElementById('map-selector');
     if (menu) {

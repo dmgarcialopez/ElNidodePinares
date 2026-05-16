@@ -150,6 +150,24 @@
             </div>
         </div>
 
+<div id="custom-scenario-modal" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:none; justify-content:center; align-items:center; z-index:9999; padding:20px;">
+    <div style="background:#1b5e20; border:2px solid #a5d6a7; border-radius:15px; padding:25px; max-width:400px; width:100%; text-align:center; box-shadow:0 8px 25px rgba(0,0,0,0.5);">
+        <p id="scenario-text" style="color:#ffffff; font-size:1.1em; font-weight:bold; margin-bottom:20px; line-height:1.5em; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"></p>
+        
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <button id="scenario-btn-continuar" style="background:#388E3C; color:white; border:1px solid #a5d6a7; border-radius:8px; padding:12px; font-weight:bold; cursor:pointer; text-transform:uppercase;">
+                Continuar Ruta Anterior
+            </button>
+            <button id="scenario-btn-guardar" style="background:#f57c00; color:white; border:1px solid #ffb74d; border-radius:8px; padding:12px; font-weight:bold; cursor:pointer; text-transform:uppercase;">
+                Guardar y Empezar Nueva
+            </button>
+            <button id="scenario-btn-borrar" style="background:#d32f2f; color:white; border:1px solid #ef5350; border-radius:8px; padding:12px; font-weight:bold; cursor:pointer; text-transform:uppercase;">
+                Borrar y Empezar Nueva
+            </button>
+        </div>
+    </div>
+</div>
+
         <div id="pwa-toast" style="display: none; position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%); background: #ff0000; color: white; padding: 15px 30px; border-radius: 50px; font-family: sans-serif; font-weight: bold; z-index: 999999; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; white-space: nowrap; border: 2px solid white;"></div>
 
     </div> <!-- Cierre correcto de #app -->

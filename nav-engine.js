@@ -621,15 +621,38 @@ function asegurarMapaInicializado() {
 }
 
 async function requestWakeLock() {
-    if ('wakeLock' in navigator) {
+    // Verificamos si el navegador soporta Wake Lock y si no está ya activo
+    if ('wakeLock' in navigator && !navWakeLock) {
         try { 
             navWakeLock = await navigator.wakeLock.request('screen'); 
-            console.log("Pantalla bloqueada para navegación");
+            console.log("Pantalla bloqueada: No se apagará.");
+
+            // Si el sistema libera el Wake Lock automáticamente (ej. por batería baja), lo reseteamos
+            navWakeLock.addEventListener('release', () => {
+                console.log('Wake Lock liberado por el sistema.');
+                navWakeLock = null;
+            });
         } catch (e) {
             console.error("Fallo al bloquear pantalla:", e);
         }
     }
 }
+
+// NUEVA FUNCIÓN: Para liberar la pantalla cuando salgamos del mapa
+export async function releaseWakeLock() {
+    if (navWakeLock) {
+        try {
+            await navWakeLock.release();
+            navWakeLock = null;
+            console.log("Pantalla desbloqueada: Volviendo al comportamiento original.");
+        } catch (e) {
+            console.error("Error al liberar Wake Lock:", e);
+        }
+    }
+}
+
+// Exponer la liberación de pantalla de forma global si la necesitas en tu HTML o UI Manager
+window.releaseWakeLock = releaseWakeLock;
 
 export function toggleseguir() {
     const btn = document.getElementById('btn-seguir');
@@ -704,6 +727,18 @@ export function ciclarCapas() {
 
 // No olvides exponerla al window
 window.ciclarCapas = ciclarCapas;
+
+// Escuchar cuando el usuario vuelve a abrir o minimiza la app/pestaña
+document.addEventListener('visibilitychange', async () => {
+    const mapContainer = document.getElementById('nav-map');
+    
+    // Solo reactivamos si la app vuelve a estar visible Y el mapa está inicializado en pantalla
+    if (document.visibilityState === 'visible' && window.state.maps?.nav && mapContainer) {
+        await requestWakeLock();
+    }
+});
+
+
 
 
 

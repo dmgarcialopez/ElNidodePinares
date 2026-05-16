@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { formatPwaUrl } from './data-service.js';
 import * as Game from './game-engine.js';
+import { releaseWakeLock } from './nav-engine.js'; // <--- NUEVA IMPORTACIÓN
 
 export function mostrarToast(msg) {
     const t = document.getElementById('toast-aviso');
@@ -164,6 +165,13 @@ export function renderAlbumContent() {
  */
 export function showScreen(screenId) {
     const pureId = screenId.replace('-screen', '');
+
+    // --- CONTROL DE WAKE LOCK (PANTALLA ENCENDIDA) ---
+    // Si la pantalla de destino NO es navegación, liberamos el bloqueo para volver a la situación original
+    if (pureId !== 'nav') {
+        releaseWakeLock(); 
+    }
+   
     
     // 1. Ocultación total
     document.querySelectorAll('.screen').forEach(s => {

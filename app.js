@@ -17,11 +17,17 @@ if ('serviceWorker' in navigator) {
         }
     });
 
-    // 2. Registro con ruta relativa pura
-    // Al NO poner '/' delante, el navegador lo busca en la misma carpeta donde está el index.html
-    navigator.serviceWorker.register('sw.js') 
+    // 2. Registro con ruta relativa pura + Cache Buster
+    // Usamos el timestamp actual para que la URL siempre sea única para el servidor
+    const swUrl = 'sw.js?v=' + new Date().getTime();
+
+    navigator.serviceWorker.register(swUrl) 
         .then(reg => {
             console.log("✅ SW activo en el subdominio:", reg.scope);
+            
+            // EXTRA: Forzar revisión de actualización en cada carga
+            // Esto le dice al navegador que compruebe si el sw.js ha cambiado en el servidor
+            reg.update();
         })
         .catch(err => {
             console.error("❌ Error en el registro:", err);
@@ -30,9 +36,69 @@ if ('serviceWorker' in navigator) {
 
 async function syncHeavyFiles() {
     const filesToSync = [
-        '/videos/Radar.mp4',
-        '/tracks/BCAMINODELOSLLANOS.kml',
-        // ... todos tus videos y tracks
+'/tracks/ABEDULARDEMURIELVIEJO.kml',
+'/tracks/BCAMINODELOSLLANOS.kml',
+'/tracks/BCANONDELRIOLOBOS.kml',
+'/tracks/BCASTROVIEJO.kml',
+'/tracks/BEMBALSEDELACUERDADELPOZO.kml',
+'/tracks/BLAFUENTONA.kml',
+'/tracks/BLAMUEDRA.kml',
+'/tracks/BPINARGRANDE.kml',
+'/tracks/BREFUGIODEPESCADORES.kml',
+'/tracks/BSUBIDAALURBION.kml',
+'/tracks/CALATANAZORYSABINAR.kml',
+'/tracks/CANONDELRIOLOBOSYMIRADORDELAGALIANA.kml',
+'/tracks/CASCADADELACHORLA.kml',
+'/tracks/CASCADADELAMINADELMEDICO.kml',
+'/tracks/CASCASADEFUENTETOBA.kml',
+'/tracks/CASTROVIEJO.kml',
+'/tracks/COVARNANTES.kml',
+'/tracks/CUEVASERENA.kml',
+'/tracks/DESFILADERODELAYECLA.kml',
+'/tracks/ELCHORRON.kml',
+'/tracks/EMBALSEDELACUERDADELPOZOYPLAYAPITA.kml',
+'/tracks/ERMITADESANBAUDELIO.kml',
+'/tracks/FUENTESANZA.kml',
+'/tracks/HABUELOSDELBOSQUE.kml',
+'/tracks/HALTOLOSBARRANCOS.kml',
+'/tracks/HANILLOVERDE.kml',
+'/tracks/HAYEDODECOVALEDA.kml',
+'/tracks/HBRABOJO.kml',
+'/tracks/HCASCADASDECOVALEDA.kml',
+'/tracks/HLAGUNASDEURBION.kml',
+'/tracks/HLAMORRADELFRAILE.kml',
+'/tracks/HLOSLLANOS.kml',
+'/tracks/HMOJONPARDO.kml',
+'/tracks/HOTEROMAYOR.kml',
+'/tracks/HVALDELAHIERBA.kml',
+'/tracks/LAFUENTONA.kml',
+'/tracks/LAGUNANEGRA.kml',
+'/tracks/LAGUNASDENEILA.kml',
+'/tracks/LAGUNAVERDE.kml',
+'/tracks/LAMUEDRA.kml',
+'/tracks/LASCALDERASDELRIOPALAZUELO.kml',
+'/tracks/MIRADORDECABEZAALTA.kml',
+'/tracks/MIRADORDELAGUNANEGRAYLAGUNAHELADA.kml',
+'/tracks/MIRADORDEPENAGORDA.kml',
+'/tracks/NECROPOLISDELALTOARLANZA.kml',
+'/tracks/PICODEURBIONYNACIMIENTODELDUERO.kml',
+'/tracks/POBLADODELACERCA.kml',
+'/tracks/PUNTODENIEVESANTAINES.kml',
+'/tracks/RASODELANAVA.kml',
+'/tracks/REFUGIODEPESCADORES.kml',
+'/tracks/SANTODOMINGODESILOS.kml',
+'/videos/Radar.mp4',
+'/videos/TND05.mp4',
+'/videos/TND10.mp4',
+'/videos/TND15.mp4',
+'/videos/TND20.mp4',
+'/videos/TND25.mp4',
+'/videos/TND30.mp4',
+'/videos/TND35.mp4',
+'/videos/TND40.mp4',
+'/videos/TND45.mp4',
+'/videos/TND50.mp4',
+'/videos/Troll.mp4',
     ];
 
     for (const url of filesToSync) {

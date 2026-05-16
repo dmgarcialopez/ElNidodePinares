@@ -1,5 +1,5 @@
 // 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.1.0';
+const CACHE_NAME = 'ENDP.1.1.1';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -69,19 +69,28 @@ function enviarMensaje(texto) {
     });
 }
 
-// --- INSTALACIÓN SECUENCIAL (EL MÉTODO ANTIGUO SEGURO) ---
+// --- INSTALACIÓN SECUENCIAL REVISADA ---
 self.addEventListener('install', event => {
     self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
             console.log("🚀 Instalando archivos uno a uno...");
+            // Creamos un sello de tiempo único para esta instalación
+            const versionBuster = new Date().getTime();
+
             for (const url of assets) {
                 try {
-                    // Descarga y guarda individualmente
-                    const response = await fetch(url);
+                    // SOLUCIÓN AL CONGELAMIENTO: Forzamos a GitHub/IONOS a darnos el archivo JS/CSS real de internet
+                    // Si la url es '/' o mapea directorios, manejamos el string con cuidado
+                    const separator = url.includes('?') ? '&' : '?';
+                    const fetchUrl = url === '/' ? `/?v=${versionBuster}` : `${url}${separator}v=${versionBuster}`;
+
+                    const response = await fetch(fetchUrl);
                     if (response.ok) {
+                        // IMPORTANTE: Guardamos en la caché con la ruta LIMPIA (ej: '/js/app.js')
+                        // para que coincida exactamente cuando estemos offline
                         await cache.put(url, response);
-                        console.log(`✅ Guardado: ${url}`);
+                        console.log(`✅ Guardado limpio en caché: ${url}`);
                     } else {
                         console.error(`❌ Fallo (Status ${response.status}): ${url}`);
                     }
@@ -106,12 +115,12 @@ self.addEventListener('activate', event => {
     );
 });
 
-// --- FETCH (GESTIÓN DE PETICIONES) ---
+// --- FETCH (GESTIÓN DE PETICIONES CORREGIDA) ---
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // 1. Google Sheets (Network First)
+    // 1. Google Sheets (Network First) - Se queda igual
     if (url.hostname.includes('docs.google.com')) {
         event.respondWith(
             fetch(request)
@@ -125,9 +134,9 @@ self.addEventListener('fetch', event => {
         return;
     } 
 
-    // 3. Resto de assets (Cache First)
+    // 3. Resto de assets (Cache First) - SOLUCIÓN PARA EL MODO OFFLINE
     event.respondWith(
-        caches.match(request).then(res => res || fetch(request))
+        // ignoreSearch: true destruye el peligro de los '?v=timestamp' del registro de cara a la caché
+        caches.match(request, { ignoreSearch: true }).then(res => res || fetch(request))
     );
 });
-

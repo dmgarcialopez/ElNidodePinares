@@ -657,29 +657,40 @@ export function asegurarMapaInicializado() {
 }
 
 async function requestWakeLock() {
-    if ('wakeLock' in navigator && !navWakeLock) {
-        try { 
-            navWakeLock = await navigator.wakeLock.request('screen'); 
-            console.log("Pantalla bloqueada: No se apagará.");
+    // Verificamos si la API es compatible
+    if (!('wakeLock' in navigator)) {
+        console.warn("Wake Lock API no es compatible con este navegador.");
+        return;
+    }
 
-            navWakeLock.addEventListener('release', () => {
-                console.log('Wake Lock liberado por el sistema.');
-                navWakeLock = null;
-            });
-        } catch (e) {
-            console.error("Fallo al bloquear pantalla:", e);
-        }
+    // Si ya hay un WakeLock activo y funcionando, no pedimos otro
+    if (navWakeLock !== null) return;
+
+    try { 
+        navWakeLock = await navigator.wakeLock.request('screen'); 
+        console.log("🟢 [WakeLock] Pantalla bloqueada con éxito. No se apagará.");
+
+        // Escuchamos por si el sistema operativo nos lo quita a la fuerza
+        navWakeLock.addEventListener('release', () => {
+            console.log('🟡 [WakeLock] El sistema ha liberado el Wake Lock.');
+            navWakeLock = null;
+        });
+    } catch (e) {
+        console.error("❌ [WakeLock] Fallo al bloquear pantalla:", e);
+        navWakeLock = null;
     }
 }
 
 export async function releaseWakeLock() {
     if (navWakeLock) {
         try {
+            console.log("⏳ [WakeLock] Liberando de forma manual por el usuario...");
             await navWakeLock.release();
             navWakeLock = null;
-            console.log("Pantalla desbloqueada: Volviendo al comportamiento original.");
+            console.log("🔴 [WakeLock] Pantalla desbloqueada: Volviendo al comportamiento original.");
         } catch (e) {
-            console.error("Error al liberar Wake Lock:", e);
+            console.error("❌ [WakeLock] Error al liberar manualmente:", e);
+            navWakeLock = null; // Forzamos limpieza de la variable
         }
     }
 }
@@ -747,11 +758,21 @@ export function ciclarCapas() {
 
 window.ciclarCapas = ciclarCapas;
 
+// --- GESTIÓN BLINDADA DEL CICLO DE VIDA (VISIBILITY) ---
 document.addEventListener('visibilitychange', async () => {
-    const mapContainer = document.getElementById('nav-map');
-    console.log(`📱 [visibilitychange] Estado de visibilidad modificado a: ${document.visibilityState}`);
+    console.log(`📱 [visibilitychange] Visibilidad cambiada a: ${document.visibilityState}`);
     
-    if (document.visibilityState === 'visible' && window.state.maps?.nav && mapContainer) {
-        await requestWakeLock();
+    // Si la pestaña vuelve a estar visible y el contenedor del mapa de navegación existe en el DOM
+    if (document.visibilityState === 'visible') {
+        const mapContainer = document.getElementById('nav-map');
+        // Verificamos que realmente estemos visualizando la pantalla del mapa
+        if (mapContainer && window.state.maps?.nav) {
+            console.log("🔄 [WakeLock] Re-solicitando Wake Lock tras recuperar visibilidad...");
+            // Pequeño delay de 200ms para asegurar que el navegador ha tomado foco completo
+            setTimeout(async () => {
+                await requestWakeLock();
+            }, 200);
+        }
     }
 });
+

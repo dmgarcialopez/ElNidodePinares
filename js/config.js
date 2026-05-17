@@ -1,5 +1,5 @@
 export const CONFIG = {
-    CAPTURE_RANGE: 100000, // Ajustado a metros reales (en tu original tenías 100km para test)
+    CAPTURE_RANGE: 100000, 
     GAME_TICK_MS: 3000,
     COLOR_NAV: '#2196F3',
     URLS: {
@@ -12,7 +12,7 @@ export const CONFIG = {
         CENTRO_DEFECTO: [41.842475, -3.003306], 
         ZOOM_MAPA_VACIO: 14, 
         ZOOM_GPS_ACTIVO: 15, 
-        PADDING_ENCUADRE: [40, 40],
+        PADDING_ENCUADRE: [5, 5],
         
         // 🎨 ESTILO ÚNICO DEL TRACK (Igual para todas las circunstancias)
         TRACK_ESTILO: {

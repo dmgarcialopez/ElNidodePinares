@@ -126,25 +126,27 @@ export function renderAlbumContent() {
     let totalPuntos = 0;
     const capturados = state.game?.captured || [];
     
-    // 1. Cabecera con el video (con sombra sutil verde en el borde)
+    // 1. Cabecera con el video (Dejamos el src vacío inicialmente)
     let html = `
         <div id="album-video-container" style="width: 220px; height: 220px; margin: 20px auto; border-radius: 20px; overflow: hidden; border: 3px solid #66bb6a;
            position: relative; background: #000; box-shadow: 0 4px 15px rgba(102, 187, 106, 0.4);">
             <video id="album-video" autoplay muted loop playsinline style="width: 100%; height: 100%; object-fit: fill;">
-                <source src="videos/Troll.mp4" type="video/mp4">
-            </video>
+                </video>
         </div>
         <div class="lista-container-album" style="padding: 0 15px; width: 100%;">
     `;
 
-    // 2. Lista de duendes con el nuevo estilo de la app
+    // 2. Lista de duendes (CON EL ARREGLO DE MAYÚSCULAS PARA LOS ICONOS)
     capturados.forEach((d, index) => {
         const nombre = d[0];
-        const tipo = d[4]?.trim() || "Radar";
+        let tipo = d[4]?.trim() || "Radar";
+        
+        // CORRECCIÓN CRÍTICA DE ICONOS: Asegura primera letra en Mayúscula (ej: 'bici' -> 'Bici')
+        tipo = tipo.charAt(0).toUpperCase() + tipo.slice(1);
+
         const puntos = parseInt(d[3]) || 0;
         totalPuntos += puntos;
 
-        // Estilo 'Pinares' para los items de la lista
         html += `
             <div class="lista-item">
                 <div class="lista-acciones-left">
@@ -163,12 +165,12 @@ export function renderAlbumContent() {
     });
 
     if (capturados.length === 0) {
-        html += `<p style="color:#a5d6a7; text-align:center; margin: 40px 0; font-weight: bold; font-size: 1.2em; text-shadow: 1px 1px black;">¡Aún no has capturado ningún duende! Explora el boque y búscalos.</p>`;
+        html += `<p style="color:#a5d6a7; text-align:center; margin: 40px 0; font-weight: bold; font-size: 1.2em; text-shadow: 1px 1px black;">¡Aún no has capturado ningún duende! Explora el bosque y búscalos.</p>`;
     }
 
-    html += `</div>`; // Cerramos lista-container-album
+    html += `</div>`; 
 
-    // 3. Marcador de puntos: Sigue siendo amarillo, pero más integrado
+    // 3. Marcador de puntos
     html += `
         <div style="width: 100%; text-align: center; margin: 35px 0 20px 0; display: flex; flex-direction: column; align-items: center;">
             <span style="font-size: 1.2em; color: #a5d6a7; font-weight: bold;">TUS PUNTOS</span>
@@ -178,8 +180,7 @@ export function renderAlbumContent() {
         </div>
     `;
 
-    // 4. Botón de Liberar Todos: VERDE BOSQUE CON ICONO ARREGLADO
-    // El color de fondo es un verde fuerte pero acorde (Material Green 700: #388E3C)
+    // 4. Botón de Liberar Todos
     html += `
         <div style="display: flex; justify-content: center; padding-bottom: 60px; padding-top: 10px; width: 100%;">
             <button onclick="liberarTodos()" style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 12px; background: #388E3C; color: white; border: 2px solid #a5d6a7; border-radius: 50px; padding: 18px 35px; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,0.6); transition: all 0.2s; outline: none;">
@@ -191,8 +192,28 @@ export function renderAlbumContent() {
     `;
 
     container.innerHTML = html;
-}
 
+    // --- CARGA ASÍNCRONA DEL VÍDEO DESDE INDEXEDDB (IGUAL QUE EL JUEGO) ---
+    // Buscamos el vídeo por defecto del álbum ('Troll') dentro de tu almacén local
+    Data.getVideoUrl('Troll')
+        .then(blobUrl => {
+            const albumVideo = document.getElementById('album-video');
+            if (albumVideo) {
+                if (blobUrl) {
+                    albumVideo.src = blobUrl;
+                } else {
+                    // Fallback si no estuviera en IndexedDB
+                    albumVideo.src = 'videos/Troll.mp4';
+                }
+                albumVideo.play().catch(() => {});
+            }
+        })
+        .catch(err => {
+            console.error("Error cargando video del álbum desde IndexedDB:", err);
+            const albumVideo = document.getElementById('album-video');
+            if (albumVideo) albumVideo.src = 'videos/Troll.mp4';
+        });
+}
 
 
 /**

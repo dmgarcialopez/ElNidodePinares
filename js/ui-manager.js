@@ -568,5 +568,41 @@ export function showNavigation() {
 // Hazla visible para que los botones del index puedan verla
 window.showNavigation = showNavigation;
 
+// Pega esto al final de tu ui-manager.js
+
+window.changeAlbumVideo = async (videoName) => {
+    const video = document.getElementById('album-video');
+    if (!video) return;
+
+    // 1. Corrección de mayúsculas por seguridad
+    const nombreLimpio = videoName.charAt(0).toUpperCase() + videoName.slice(1).trim();
+
+    try {
+        console.log(`🎥 Cambiando video del álbum a: ${nombreLimpio} (Desde IndexedDB)`);
+        
+        // 2. Buscamos el Blob en tu servicio de datos
+        const blobUrl = await Data.getVideoUrl(nombreLimpio);
+        
+        if (blobUrl) {
+            // Liberamos memoria del Blob anterior
+            if (video.src.startsWith('blob:')) {
+                URL.revokeObjectURL(video.src);
+            }
+            video.src = blobUrl;
+        } else {
+            // Fallback si no está en la base de datos local
+            video.src = `videos/${nombreLimpio}.mp4`;
+        }
+    } catch (err) {
+        console.error("❌ Error al cambiar el video desde IndexedDB:", err);
+        video.src = `videos/${nombreLimpio}.mp4`;
+    }
+
+    // 3. Reproducción segura
+    video.play().catch(e => console.log("Esperando interacción para reproducir vídeo"));
+};
+
+
+
 
 

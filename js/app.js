@@ -362,14 +362,6 @@ window.liberarTodos = () => {
     });
 };
 
-window.changeAlbumVideo = (videoName) => {
-    const video = document.getElementById('album-video');
-    if (video) {
-        video.src = `videos/${videoName}.mp4`;
-        video.play().catch(e => console.log("Esperando interacción para video"));
-    }
-};
-
 window.compartirRuta = async (titulo, url) => {
     if (navigator.share) {
         try {

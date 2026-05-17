@@ -1,12 +1,12 @@
 // js/nav-engine.js
 import { state } from './state.js';
 import { mostrarPromptRuta, mostrarToast, mostrarSelectorEscenarioRuta } from './ui-manager.js';
+import { activateScreenLock, releaseScreenLock } from './wakelock-service.js';
 
 let isRecording = false;
 let watchId = null;
 let currentPath = [];
 let polyline = null;
-let navWakeLock = null; 
 let autoCenter = false; 
 const ordenCapas = ['osm', 'topo', 'sat'];
 let indiceCapaActual = 0;
@@ -188,8 +188,7 @@ function ejecutarInicioGrabacion(btn) {
     }
 
     if (navigator.geolocation) {
-        activarSeguimientoContinuo();
-        mostrarToast("🟢 Sistema listo. Introduce coordenadas simuladas...");
+        activarSeguimientoContinuo();        
     }
     console.log(`🟢 [ejecutarInicioGrabacion] Terminado. Estado final: isRecording = ${isRecording}`);
 }
@@ -203,6 +202,18 @@ function activarSeguimientoContinuo() {
 
     watchId = navigator.geolocation.watchPosition(
         (pos) => {
+            // 🛡️ CONTROL DE SEGURIDAD ANTIFUGAS:
+            // Si el cliente hizo "back" y salió de la pantalla del navegador, apagamos el GPS al instante
+            const mapContainer = document.getElementById('nav-map');
+            if (!mapContainer || mapContainer.offsetParent === null) {
+                console.log("🛑 GPS continuo detenido de manera segura (fuera de pantalla de navegación).");
+                if (watchId) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                return;
+            }
+
             console.log(`📍 [GPS COORDENADA] Recibida: [${pos.coords.latitude}, ${pos.coords.longitude}]. Grabando = ${isRecording}`);
             const point = [pos.coords.latitude, pos.coords.longitude];
             currentPath.push(point);
@@ -269,6 +280,14 @@ function iniciarSeguimientoGPS() {
 
         watchId = navigator.geolocation.watchPosition(
             (pos) => {
+                // 🛡️ CONTROL DE SEGURIDAD ANTIFUGAS:
+                const mapContainer = document.getElementById('nav-map');
+                if (!mapContainer || mapContainer.offsetParent === null) {
+                    console.log("🛑 Seguimiento GPS estándar detenido de forma segura.");
+                    detenerSeguimientoGPS();
+                    return;
+                }
+
                 const point = [pos.coords.latitude, pos.coords.longitude];
                 ultimaPosicion = point; 
                 
@@ -349,8 +368,7 @@ function stopRecording(btn) {
         localStorage.setItem('rutas_guardadas', JSON.stringify(historico));
         mostrarToast("Ruta finalizada y guardada en el historial.");
     } else {
-        console.log("🔴 [stopRecording] Detenido sin puntos acumulados.");
-        mostrarToast("Grabación finalizada (sin datos).");
+        console.log("🔴 [stopRecording] Detenido sin puntos acumulados.");       
     }
     console.log(`🔴 [stopRecording] Finalizado. Estado resultante: isRecording = ${isRecording}`);
 }
@@ -362,7 +380,7 @@ export function finalizarYExportar(puntosForzados = null) {
 
         if (!puntosAGuardar || puntosAGuardar.length < 2) {
             console.log(`⚠️ [finalizarYExportar] Cancelado por falta de puntos. Longitud: ${puntosAGuardar?.length}`);
-            mostrarToast("No hay suficientes puntos para guardar.");
+            mostrarToast("No hay Ruta Activa.");
             resolve(false); 
             return;
         }
@@ -650,52 +668,13 @@ export function asegurarMapaInicializado() {
         }).addTo(window.state.maps.nav);
 
         console.log("Mapa de navegación listo.");
-        requestWakeLock();
+        
+        // 🔥 LLAMADA UNIFICADA: Registra la entrada a la pantalla del mapa
+        activateScreenLock();
     } catch (e) {
         console.error("Error al crear el mapa:", e);
     }
 }
-
-async function requestWakeLock() {
-    // Verificamos si la API es compatible
-    if (!('wakeLock' in navigator)) {
-        console.warn("Wake Lock API no es compatible con este navegador.");
-        return;
-    }
-
-    // Si ya hay un WakeLock activo y funcionando, no pedimos otro
-    if (navWakeLock !== null) return;
-
-    try { 
-        navWakeLock = await navigator.wakeLock.request('screen'); 
-        console.log("🟢 [WakeLock] Pantalla bloqueada con éxito. No se apagará.");
-
-        // Escuchamos por si el sistema operativo nos lo quita a la fuerza
-        navWakeLock.addEventListener('release', () => {
-            console.log('🟡 [WakeLock] El sistema ha liberado el Wake Lock.');
-            navWakeLock = null;
-        });
-    } catch (e) {
-        console.error("❌ [WakeLock] Fallo al bloquear pantalla:", e);
-        navWakeLock = null;
-    }
-}
-
-export async function releaseWakeLock() {
-    if (navWakeLock) {
-        try {
-            console.log("⏳ [WakeLock] Liberando de forma manual por el usuario...");
-            await navWakeLock.release();
-            navWakeLock = null;
-            console.log("🔴 [WakeLock] Pantalla desbloqueada: Volviendo al comportamiento original.");
-        } catch (e) {
-            console.error("❌ [WakeLock] Error al liberar manualmente:", e);
-            navWakeLock = null; // Forzamos limpieza de la variable
-        }
-    }
-}
-
-window.releaseWakeLock = releaseWakeLock;
 
 export function toggleseguir() {
     const btn = document.getElementById('btn-seguir');
@@ -758,21 +737,8 @@ export function ciclarCapas() {
 
 window.ciclarCapas = ciclarCapas;
 
-// --- GESTIÓN BLINDADA DEL CICLO DE VIDA (VISIBILITY) ---
-document.addEventListener('visibilitychange', async () => {
-    console.log(`📱 [visibilitychange] Visibilidad cambiada a: ${document.visibilityState}`);
-    
-    // Si la pestaña vuelve a estar visible y el contenedor del mapa de navegación existe en el DOM
-    if (document.visibilityState === 'visible') {
-        const mapContainer = document.getElementById('nav-map');
-        // Verificamos que realmente estemos visualizando la pantalla del mapa
-        if (mapContainer && window.state.maps?.nav) {
-            console.log("🔄 [WakeLock] Re-solicitando Wake Lock tras recuperar visibilidad...");
-            // Pequeño delay de 200ms para asegurar que el navegador ha tomado foco completo
-            setTimeout(async () => {
-                await requestWakeLock();
-            }, 200);
-        }
-    }
-});
-
+export async function releaseWakeLock() {
+    // 🔥 LLAMADA UNIFICADA: Libera el hardware limpiamente de forma global
+    await releaseScreenLock();
+}
+window.releaseWakeLock = releaseWakeLock;

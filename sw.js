@@ -1,7 +1,7 @@
 // sw.js
 
 // 1. Nombre de la memoria (Caché) - 🟢 ¡A partir de ahora ESTE es el único sitio donde cambiarás la versión!
-const CACHE_NAME = 'ENDP.3.0';
+const CACHE_NAME = 'ENDP.2.0';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [

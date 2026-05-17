@@ -1,5 +1,7 @@
-// 1. Nombre de la memoria (Caché) - Cámbialo si haces cambios grandes en el futuro
-const CACHE_NAME = 'ENDP.1.1.2';
+// sw.js
+
+// 1. Nombre de la memoria (Caché) - 🟢 ¡A partir de ahora ESTE es el único sitio donde cambiarás la versión!
+const CACHE_NAME = 'ENDP.2.0';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -15,46 +17,6 @@ const assets = [
 '/js/data-service.js', 
 '/js/config.js',
 '/js/map-engine.js', 
-'/icons/AddSetas.png',
-'/icons/Aparcar.png',
-'/icons/bici.png',
-'/icons/BuscaDuendes.png',
-'/icons/BuscaSetas.png',
-'/icons/CapDuende.png',
-'/icons/climb.png',
-'/icons/coche.png',
-'/icons/compartir.png',
-'/icons/FondoDuendes.png',
-'/icons/food.png',
-'/icons/FreeDuende.png',
-'/icons/hotel.png',
-'/icons/logo-hotel.png',
-'/icons/logo-hotelpq.png',
-'/icons/logo-small.png',
-'/icons/Maplayer.png',
-'/icons/microfono.png',
-'/icons/Navegacion.png',
-'/icons/NOREC.png',
-'/icons/photos.png',
-'/icons/poimapa.png',
-'/icons/poi.png',
-'/icons/Rec.png',
-'/icons/ruta.png',
-'/icons/SaveFile.png',
-'/icons/TND05.png',
-'/icons/TND10.png',
-'/icons/TND15.png',
-'/icons/TND20.png',
-'/icons/TND25.png',
-'/icons/TND30.png',
-'/icons/TND35.png',
-'/icons/TND40.png',
-'/icons/TND45.png',
-'/icons/TND50.png',
-'/icons/Ver.png',
-'/icons/video.png',
-'/icons/walk.png',
-'/icons/wood.png',
 ];
 
 // Función para enviar mensajes a la ventana (UI)
@@ -75,6 +37,13 @@ self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
             console.log("🚀 Instalando archivos uno a uno...");
+            
+            // =========================================================================
+            // 👇 NUEVA LÍNEA: Guardamos dinámicamente la versión para que app.js pueda leerla
+            // =========================================================================
+            await cache.put('/pwa-version.txt', new Response(CACHE_NAME));
+            // =========================================================================
+
             // Creamos un sello de tiempo único para esta instalación
             const versionBuster = new Date().getTime();
 

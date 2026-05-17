@@ -1,7 +1,7 @@
 import { state } from './state.js';
-import { formatPwaUrl } from './data-service.js';
 import * as Game from './game-engine.js';
-import { releaseWakeLock } from './nav-engine.js'; // <--- NUEVA IMPORTACIÓN
+import { releaseWakeLock } from './nav-engine.js';
+import * as Data from './data-service.js';
 
 export function mostrarToast(msg) {
     const t = document.getElementById('toast-aviso');
@@ -128,12 +128,13 @@ export function renderAlbumContent() {
     
     // 1. Cabecera con el video (con sombra sutil verde en el borde)
     let html = `
-        <div id="album-video-container" style="width: 220px; height: 220px; margin: 20px auto; border-radius: 20px; overflow: hidden; border: 3px solid #66bb6a; position: relative; background: #000; box-shadow: 0 4px 15px rgba(102, 187, 106, 0.4);">
+        <div id="album-video-container" style="width: 220px; height: 220px; margin: 20px auto; border-radius: 20px; overflow: hidden; border: 3px solid #66bb6a;
+           position: relative; background: #000; box-shadow: 0 4px 15px rgba(102, 187, 106, 0.4);">
             <video id="album-video" autoplay muted loop playsinline style="width: 100%; height: 100%; object-fit: fill;">
                 <source src="videos/Troll.mp4" type="video/mp4">
             </video>
         </div>
-        <div class="lista-container-album">
+        <div class="lista-container-album" style="padding: 0 15px; width: 100%;">
     `;
 
     // 2. Lista de duendes con el nuevo estilo de la app
@@ -145,18 +146,18 @@ export function renderAlbumContent() {
 
         // Estilo 'Pinares' para los items de la lista
         html += `
-            <div class="lista-item" style="display:flex; align-items:center; background:rgba(255,255,255,0.06); margin:12px; padding:15px; border-radius:12px; gap:12px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
-                <div class="lista-acciones-left" style="display:flex; gap:10px;">
-                    <button class="btn-accion" onclick="liberarUno(${index})" style="background:none; border:none; width:38px; cursor:pointer; opacity:0.8; transition:opacity 0.2s;">
+            <div class="lista-item">
+                <div class="lista-acciones-left">
+                    <button class="btn-accion" onclick="liberarUno(${index})">
                         <img src="icons/FreeDuende.png" style="width:100%;" onerror="this.style.display='none'; this.parentNode.innerText='❌'">
                     </button>
-                    <button class="btn-accion" onclick="changeAlbumVideo('${tipo}')" style="background:none; border:none; width:38px; cursor:pointer; opacity:0.8; transition:opacity 0.2s;">
+                    <button class="btn-accion" onclick="changeAlbumVideo('${tipo}')">
                         <img src="icons/${tipo}.png" style="width:100%;" onerror="this.src='icons/Radar.png'">
                     </button>
                 </div>
                 <div class="lista-info" style="flex:1;">
-                    <span style="color:#e8f5e9; font-weight:bold; font-size: 1.1em;">${nombre}</span>
-                    <span style="color:#a5d6a7; font-size: 0.9em; display:block; margin-top:3px;">Puntos: ${puntos}</span>
+                    <span>${nombre}</span>
+                    <span>Puntos: ${puntos}</span>
                 </div>
             </div>`;
     });
@@ -412,18 +413,37 @@ window.prepararNavegacion = async function(urlTrack) {
         const blob = await Data.getFile(`/${urlTrack}`); 
 
         if (blob) {
-            console.log(`📍 ${extension.toUpperCase()} encontrado en IndexedDB, cargando modo offline...`);
-            const trackText = await blob.text();
+            console.log(`📍 ${extension.toUpperCase()} encontrado en IndexedDB, procesando contenido...`);
             
-            // Usamos el delay para que Leaflet tenga tiempo de inicializar el contenedor
             setTimeout(() => {
+                // 🔄 PRIORIDAD OFFLINE: Primero intentamos inyectar texto plano.
                 if (typeof window.cargarTrackDesdeTexto === 'function') {
-                    // Pasamos el texto y la extensión detectada
-                    window.cargarTrackDesdeTexto(trackText, extension);
-                } else {
-                    // Fallback por si la función no está disponible
+                    console.log(`🗺️ Extrayendo texto XML de la DB para window.cargarTrackDesdeTexto...`);
+                    blob.text()
+                        .then(trackText => {
+                            window.cargarTrackDesdeTexto(trackText, extension);
+                        })
+                        .catch(errText => console.error("❌ Error leyendo texto del blob:", errText));
+                } 
+                // Fallback A: Si no existe la carga de texto, usamos URL de memoria
+                else if (typeof window.cargarTrackExterno === 'function') {
+                    const urlTemporalBlob = URL.createObjectURL(blob);
+                    window.cargarTrackExterno(urlTemporalBlob);
+                    console.log(`🗺️ URL de objeto (${extension.toUpperCase()}) enviada al motor de mapas.`);
+                } 
+                // Fallback B: Si todo lo demás falla, intenta ir por red tradicional
+                else {
                     window.cargarTrackExterno(urlTrack);
                 }
+
+                // Forzamos el refresco visual del mapa de Leaflet
+                if (window.state && window.state.maps && window.state.maps.nav) {
+                    setTimeout(() => {
+                        window.state.maps.nav.invalidateSize();
+                        console.log("🔄 Mapa de navegación refrescado forzosamente.");
+                    }, 150);
+                }
+
             }, 200);
             
         } else {
@@ -436,8 +456,9 @@ window.prepararNavegacion = async function(urlTrack) {
         }
     } catch (err) {
         console.error("Error en el puente de navegación local:", err);
-        // Si hay error en la DB, intentamos el método tradicional
-        window.cargarTrackExterno(urlTrack);
+        if (typeof window.cargarTrackExterno === 'function') {
+            window.cargarTrackExterno(urlTrack);
+        }
     }
 };
 
@@ -468,9 +489,8 @@ export function renderPaseoList() {
         const urlGoogleMaps = `https://www.google.com/maps?q=${lat},${lng}`;
 
         return `
-            <div class="lista-item" style="display:flex; align-items:center; background:rgba(255,255,255,0.1); margin:10px; padding:12px; border-radius:10px; gap:10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                <div class="lista-acciones-left" style="display:flex; gap:8px;">
-                    
+            <div class="lista-item">
+                <div class="lista-acciones-left">                    
                     ${(lat && lng) ? `
                     <button class="btn-accion" onclick="window.open('${urlGoogleMaps}', '_blank')" style="background:none; border:none; width:35px; cursor:pointer;">
                         <img src="icons/coche.png" style="width:100%;">
@@ -486,9 +506,7 @@ export function renderPaseoList() {
                 </div>
                 
                 <div class="lista-info" onclick="window.open('${urlRuta}', '_blank')" style="flex:1; cursor:pointer;">
-                    <span style="color: #FFFFFF !important; font-weight: bold; font-size: 16px;">
-                        ${nombre}
-                    </span>
+                    <span>${nombre}</span>
                 </div>
             </div>`;
     }).join('');

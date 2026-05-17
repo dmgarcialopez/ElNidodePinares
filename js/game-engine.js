@@ -1,14 +1,10 @@
-// js/game-engine.js
 import { state } from './state.js';
 import * as UI from './ui-manager.js';
 import * as Data from './data-service.js'; // Importación necesaria para getVideoUrl
-import { activateScreenLock, releaseScreenLock } from './wakelock-service.js';
 
 // --- INICIO DEL JUEGO ---
 export async function initGame() {
-    console.log("🎮 Iniciando pantalla del juego...");
-    // Activamos el Wake Lock a través de nuestro servicio unificado
-    activateScreenLock();
+    requestWakeLock();
     
     if (!state.maps.game) {
         state.maps.game = L.map('game-map', { zoomControl: false }).setView([41.84253, -3.003343], 15);
@@ -31,16 +27,6 @@ function requestLocation() {
 
 // --- LÓGICA PRINCIPAL (Radar y Duendes) ---
 async function updateGameStatus(pos) {
-    // 🛡️ CONTROL DE SEGURIDAD INTERNO:
-    // Si el usuario hizo "back" y el mapa ya no está visible en el DOM, abortamos el bucle.
-    // Esto evita que el juego siga pidiendo coordenadas GPS infinitamente en segundo plano.
-    const gameMapEl = document.getElementById('game-map');
-    if (!gameMapEl || gameMapEl.offsetParent === null) {
-        console.log("🛑 Bucle de juego detenido de forma segura (pantalla fuera de vista).");
-        if (state.game.timer) clearTimeout(state.game.timer);
-        return;
-    }
-
     const { latitude: uLat, longitude: uLng } = pos.coords;
     state.game.userCoords = { lat: uLat, lng: uLng }; 
 
@@ -98,32 +84,36 @@ async function updateGameStatus(pos) {
 
     if (closestIdx !== -1) {
         const closest = duendesDisponibles[closestIdx];
-        if (name) name.innerText = closest[0];
+        name.innerText = closest[0];
 
         let videoNombre = "Radar"; // Por defecto el radar
         
         if (state.game.lastDistance < state.game.CAPTURE_RANGE) {
-            if (info) info.innerText = "¡Duende a la Vista!";
+            info.innerText = "¡Duende a la Vista!";
             videoNombre = closest[4] ? closest[4].trim() : "Radar";
-            if (container) container.onclick = () => capturar(closest);
+            container.onclick = () => capturar(closest);
         } else {
-            if (info) info.innerText = `Duende a ${Math.round(state.game.lastDistance)}m`;
-            if (container) container.onclick = null;
+            info.innerText = `Duende a ${Math.round(state.game.lastDistance)}m`;
+            container.onclick = null;
         }
 
         // --- LÓGICA INDEXEDDB PARA VÍDEO ---
-        if (video && (!video.dataset.currentType || video.dataset.currentType !== videoNombre)) {
+        // Solo cambiamos el src si el video es diferente al que ya se está reproduciendo
+        if (!video.dataset.currentType || video.dataset.currentType !== videoNombre) {
             try {
+                // Obtenemos la URL del Blob desde nuestro servicio de datos
                 const blobUrl = await Data.getVideoUrl(videoNombre);
                 
                 if (blobUrl) {
+                    // Liberamos la memoria de la URL anterior si era un Blob (evita fugas de memoria)
                     if (video.src.startsWith('blob:')) {
                         URL.revokeObjectURL(video.src);
                     }
                     video.src = blobUrl;
-                    video.dataset.currentType = videoNombre; 
+                    video.dataset.currentType = videoNombre; // Marcamos qué estamos reproduciendo
                     video.play().catch(()=>{});
                 } else {
+                    // Fallback: Si por alguna razón no está en IndexedDB, intentar ruta normal
                     video.src = `videos/${videoNombre}.mp4`;
                 }
             } catch (err) {
@@ -134,8 +124,6 @@ async function updateGameStatus(pos) {
     }
 
     map.panTo([uLat, uLng]);
-    
-    // Encadenamos el siguiente frame del radar si seguimos en la pantalla
     state.game.timer = setTimeout(requestLocation, state.game.TICK_MS);
 }
 
@@ -144,7 +132,7 @@ function capturar(duende) {
     state.game.captured.push(duende);
     localStorage.setItem('duendesCapturados', JSON.stringify(state.game.captured));
     UI.mostrarToast("¡Has capturado a " + duende[0] + "!");
-    refresh(); 
+    refresh(); // Usamos refresh para forzar actualización inmediata
 }
 
 /**
@@ -155,8 +143,10 @@ export function refresh() {
         clearTimeout(state.game.timer);
     }
 
+    // SI ya tenemos coordenadas, repintamos el mapa al instante
     if (state.game.userCoords && state.game.userCoords.lat) {
         console.log("Refresco instantáneo con coordenadas guardadas");
+        // Creamos un objeto que simule la estructura que recibe de Geolocation
         const mockPos = {
             coords: {
                 latitude: state.game.userCoords.lat,
@@ -165,6 +155,7 @@ export function refresh() {
         };
         updateGameStatus(mockPos);
     } else {
+        // SI NO, no queda otra que pedir posición al GPS
         requestLocation();
     }
 }
@@ -175,4 +166,10 @@ function getDistance(lat1, lon1, lat2, lon2) {
     const dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
     const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+        try { state.game.wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    }
 }

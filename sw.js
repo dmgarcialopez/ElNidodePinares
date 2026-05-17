@@ -1,7 +1,7 @@
 // sw.js
 
 // 1. Nombre de la memoria (Caché) - 🟢 ¡A partir de ahora ESTE es el único sitio donde cambiarás la versión!
-const CACHE_NAME = 'ENDP.2.0';
+const CACHE_NAME = 'ENDP.4.0';
 
 // 2. Lista de archivos críticos para que la App funcione offline
 const assets = [
@@ -67,8 +67,7 @@ self.addEventListener('install', event => {
                     console.error(`❌ Error de red en: ${url}`);
                 }
             }
-            console.log("🏁 Proceso de instalación finalizado");
-            enviarMensaje("📲 App lista para usar offline");
+            console.log("🏁 Proceso de instalación finalizado")            
         })
     );
 });
@@ -88,22 +87,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
-
-    // 1. Google Sheets (Network First) - Se queda igual
-    if (url.hostname.includes('docs.google.com')) {
-        event.respondWith(
-            fetch(request)
-                .then(res => {
-                    const copy = res.clone();
-                    caches.open(CACHE_NAME).then(c => c.put(request, copy));
-                    return res;
-                })
-                .catch(() => caches.match(request))
-        );
-        return;
-    } 
-
-    // 3. Resto de assets (Cache First) - SOLUCIÓN PARA EL MODO OFFLINE
+    // Todos los assets (Cache First) - SOLUCIÓN PARA EL MODO OFFLINE
     event.respondWith(
         // ignoreSearch: true destruye el peligro de los '?v=timestamp' del registro de cara a la caché
         caches.match(request, { ignoreSearch: true }).then(res => res || fetch(request))

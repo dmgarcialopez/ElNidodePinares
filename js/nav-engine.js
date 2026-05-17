@@ -1,12 +1,13 @@
 // js/nav-engine.js
 import { state } from './state.js';
 import { mostrarPromptRuta, mostrarToast, mostrarSelectorEscenarioRuta } from './ui-manager.js';
-import { activateScreenLock, releaseScreenLock } from './wakelock-service.js';
+import { CONFIG } from './config.js';
 
 let isRecording = false;
 let watchId = null;
 let currentPath = [];
 let polyline = null;
+let navWakeLock = null; 
 let autoCenter = false; 
 const ordenCapas = ['osm', 'topo', 'sat'];
 let indiceCapaActual = 0;
@@ -28,13 +29,23 @@ const baseLayers = {
 };
 
 function actualizarPuntoPosicion(point) {
-    const mapa = state.maps?.nav;
-    if (!mapa) return;
+    // 🔄 CORRECCIÓN 1: Si el mapa nace desde la señal de GPS, hereda centro y zoom por defecto
+    if (!state.maps?.nav) {
+        state.maps.nav = L.map('nav-map', { 
+            zoomControl: false,
+            dragging: true,
+            touchZoom: true
+        }).setView(CONFIG.MAPA.CENTRO_DEFECTO, CONFIG.MAPA.ZOOM_MAPA_VACIO);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(state.maps.nav);
+    }
+
+    const mapa = state.maps.nav;
 
     if (!marcadorPosicionUsuario) {
         marcadorPosicionUsuario = L.circleMarker(point, {
             radius: 8,          
-            fillColor: '#007FFF', 
+            fillColor: CONFIG.MAPA.TRACK_ESTILO.color, // Hereda tu color corporativo
             fillOpacity: 1,
             color: '#FFFFFF',    
             weight: 3,          
@@ -45,20 +56,29 @@ function actualizarPuntoPosicion(point) {
     } else {
         marcadorPosicionUsuario.setLatLng(point);
     }
+
+    // 🔄 CORRECCIÓN 2: Al seguir activamente la señal, aplicamos tu ZOOM_GPS_ACTIVO
+    if (autoCenter) {
+        mapa.setView(point, CONFIG.MAPA.ZOOM_GPS_ACTIVO);
+    }
 }
 
 let currentLayer = null;
 
-export function toggleRecording() {
+export async function toggleRecording() {
     const btn = document.getElementById('btn-record');
     console.log(`\n--- 🔍 [toggleRecording] Pulsado. Estado inicial: isRecording = ${isRecording} ---`);
     
     if (!isRecording) {
         console.log("➡️ Llama a startRecording(btn)");
+        // 🔐 Intentamos bloquear la pantalla AQUÍ, aprovechando el clic directo del usuario
+        await requestWakeLock();
         startRecording(btn);
     } else {
         console.log("➡️ Llama a stopRecording(btn) desde toggle");
         stopRecording(btn);
+        // 🔓 Liberamos la pantalla al detener la grabación
+        await releaseWakeLock();
     }
 }
 
@@ -66,7 +86,9 @@ async function startRecording(btn) {
     const mapa = window.state.maps?.nav;
     console.log(`🔍 [startRecording] Evaluando escenarios. esGrabacionPrevia = ${esGrabacionPrevia}, puntos = ${currentPath.length}`);
 
+    // =========================================================================
     // ESCENARIO A: Existe una grabación previa sin guardar/descartar en pantalla
+    // =========================================================================
     if (esGrabacionPrevia && currentPath.length > 0) {
         console.log("⚠️ [startRecording] Escenario A detectado (Grabación previa activa). Abriendo modal...");
         const mensaje = "Tienes una grabación previa en pantalla.\n\n¿Qué deseas hacer con ella?";
@@ -74,7 +96,6 @@ async function startRecording(btn) {
         const opcionSeleccionada = await mostrarSelectorEscenarioRuta(mensaje);
         console.log(`🎭 [startRecording] Usuario seleccionó opción: [${opcionSeleccionada}]`);
         
-        // --- OPCIÓN 1: CONTINUAR ---
         if (opcionSeleccionada === 'continuar') {
             console.log("➡️ Opción CONTINUAR seleccionada.");
             esGrabacionPrevia = false; 
@@ -83,40 +104,26 @@ async function startRecording(btn) {
             return;
         } 
         
-        // --- OPCIÓN 2: GUARDAR Y EMPEZAR TRACK NUEVO ---
         else if (opcionSeleccionada === 'guardar') {
             console.log("➡️ Opción GUARDAR seleccionada. Iniciando clonación y parada.");
             const pathAVender = JSON.parse(JSON.stringify(currentPath));
             
-            console.log("⏸️ Ejecutando stopRecording(btn) previo al guardado...");
             stopRecording(btn); 
 
-            console.log("⏳ Pausa de 150ms para la UI...");
             await new Promise(resolve => setTimeout(resolve, 150));
-
-            console.log("💾 Lanzando promesa finalizarYExportar...");
             const guardadoExitoso = await finalizarYExportar(pathAVender);
-            console.log(`💾 Promesa finalizarYExportar resuelta. ¿Éxito? ${guardadoExitoso}`);
             
             if (guardadoExitoso) {
-                console.log("🧹 Iniciando limpieza completa del mapa para nuevo track...");
                 limpiarMapaCompleto(); 
                 currentPath = []; 
                 esGrabacionPrevia = false; 
 
-                console.log("⏳ Pausa de 300ms tras la descarga para asentar el navegador...");
                 await new Promise(resolve => setTimeout(resolve, 300));
 
                 if (mapa) {
-                    console.log("🗺️ Dibujando polilínea vacía inicial en el mapa...");
-                    polyline = L.polyline(currentPath, {
-                        color: '#007FFF', weight: 8, opacity: 1,          
-                        lineJoin: 'round', lineCap: 'round',
-                        shadowBlur: 5, shadowColor: '#007FFF' 
-                    }).addTo(mapa);
+                    polyline = L.polyline(currentPath, CONFIG.MAPA.TRACK_ESTILO).addTo(mapa);
                 }
 
-                console.log("🚀 [Flujo Principal] Forzando el inicio de la nueva grabación...");
                 isRecording = true;
                 autoCenter = true;
 
@@ -124,19 +131,13 @@ async function startRecording(btn) {
                     btn.classList.add('recording-active');
                     const img = btn.querySelector('img');
                     if (img) img.src = 'icons/Rec.png'; 
-                    console.log("🎨 UI del botón actualizada a REC activada.");
                 }
 
                 if (navigator.geolocation) {
-                    console.log("🛰️ Llamando a activarSeguimientoContinuo()...");
                     activarSeguimientoContinuo();
                     mostrarToast("🟢 ¡Ruta guardada! Iniciando track nuevo...");
                 }
-
-                console.log(`🟢 [FIN FLUJO OPCIÓN 2] Grabación nueva iniciada de forma lineal. isRecording = ${isRecording}`);
-
             } else {
-                console.log("❌ Guardado rechazado o cancelado por el usuario. Reanudando track previo...");
                 mostrarToast("Guardado cancelado. Reanudando ruta...");
                 ejecutarInicioGrabacion(btn);
                 esGrabacionPrevia = true;
@@ -144,9 +145,7 @@ async function startRecording(btn) {
             return;
         }
 
-        // --- OPCIÓN 3: BORRAR Y EMPEZAR TRACK NUEVO ---
         else if (opcionSeleccionada === 'borrar') {
-            console.log("➡️ Opción BORRAR seleccionada.");
             limpiarMapaCompleto();
             currentPath = [];
             esGrabacionPrevia = false;
@@ -158,18 +157,15 @@ async function startRecording(btn) {
         return; 
     }
 
-    // ESCENARIO B: Se está siguiendo un track externo (KML/GPX importado)
-    if (trackActivo && mapa) {
-        console.log("➡️ Escenario B detectado (Siguiendo track externo).");
-        currentPath = []; 
-        esGrabacionPrevia = false;
-        ejecutarInicioGrabacion(btn);
-        mostrarToast("Siguiendo ruta externa...");
-        return; 
-    }
-
-    // ESCENARIO C: No hay rutas previas en pantalla (Grabación directa desde cero)
-    console.log("➡️ Escenario C detectado (Grabación directa desde cero).");
+    // =========================================================================
+    // ESCENARIO C (ÚNICO): Grabación limpia desde cero
+    // (Borra automáticamente cualquier track externo importado previo)
+    // =========================================================================
+    console.log("➡️ Iniciando grabación directa desde cero (Limpiando mapa si hubiera tracks).");
+    
+    // Al meter limpiarMapaCompleto() aquí, si había un KML/GPX del antiguo escenario B, se desvanece del mapa
+    limpiarMapaCompleto(); 
+    
     currentPath = [];
     esGrabacionPrevia = false;
     ejecutarInicioGrabacion(btn);
@@ -188,7 +184,14 @@ function ejecutarInicioGrabacion(btn) {
     }
 
     if (navigator.geolocation) {
-        activarSeguimientoContinuo();        
+        activarSeguimientoContinuo();
+        
+        // 🔄 CORRECCIÓN 3: Al pulsar grabar, si ya hay una posición GPS previa, metemos zoom de acción de inmediato
+        if (ultimaPosicion && window.state.maps?.nav) {
+            window.state.maps.nav.setView(ultimaPosicion, CONFIG.MAPA.ZOOM_GPS_ACTIVO);
+        }
+        
+        mostrarToast("🟢 Grabación Activa");
     }
     console.log(`🟢 [ejecutarInicioGrabacion] Terminado. Estado final: isRecording = ${isRecording}`);
 }
@@ -202,18 +205,6 @@ function activarSeguimientoContinuo() {
 
     watchId = navigator.geolocation.watchPosition(
         (pos) => {
-            // 🛡️ CONTROL DE SEGURIDAD ANTIFUGAS:
-            // Si el cliente hizo "back" y salió de la pantalla del navegador, apagamos el GPS al instante
-            const mapContainer = document.getElementById('nav-map');
-            if (!mapContainer || mapContainer.offsetParent === null) {
-                console.log("🛑 GPS continuo detenido de manera segura (fuera de pantalla de navegación).");
-                if (watchId) {
-                    navigator.geolocation.clearWatch(watchId);
-                    watchId = null;
-                }
-                return;
-            }
-
             console.log(`📍 [GPS COORDENADA] Recibida: [${pos.coords.latitude}, ${pos.coords.longitude}]. Grabando = ${isRecording}`);
             const point = [pos.coords.latitude, pos.coords.longitude];
             currentPath.push(point);
@@ -226,7 +217,7 @@ function activarSeguimientoContinuo() {
 }
 
 function limpiarMapaCompleto() {
-    console.log("🧹 [limpiarMapaCompleto] Iniciando purga de elementos...");
+    console.log("🧹 [limpiarMapaCompleto] Iniciando purga de elements...");
     const mapa = window.state.maps?.nav; 
     if (!mapa) {
         console.log("🧹 [limpiarMapaCompleto] No hay mapa inicializado en state.maps.nav");
@@ -258,7 +249,6 @@ function limpiarMapaCompleto() {
         currentPath = []; 
         console.log("🧹 Array currentPath vaciado.");
 
-        // BLINDAJE ANTI-ERRORES PARA LEAFLET
         try { mapa.closePopup(); } catch(e) { console.log("🧹 Nota: No había popups que cerrar."); }
         try { mapa.closeTooltip(); } catch(e) { console.log("🧹 Nota: No había tooltips que cerrar."); }
         
@@ -280,21 +270,13 @@ function iniciarSeguimientoGPS() {
 
         watchId = navigator.geolocation.watchPosition(
             (pos) => {
-                // 🛡️ CONTROL DE SEGURIDAD ANTIFUGAS:
-                const mapContainer = document.getElementById('nav-map');
-                if (!mapContainer || mapContainer.offsetParent === null) {
-                    console.log("🛑 Seguimiento GPS estándar detenido de forma segura.");
-                    detenerSeguimientoGPS();
-                    return;
-                }
-
                 const point = [pos.coords.latitude, pos.coords.longitude];
                 ultimaPosicion = point; 
                 
                 actualizarPuntoPosicion(point);
                 
                 if (autoCenter && state.maps && state.maps.nav) {
-                    state.maps.nav.panTo(point);
+                    state.maps.nav.setView(point, CONFIG.MAPA.ZOOM_GPS_ACTIVO); // 🔄 CORRECCIÓN 4: Fijamos el zoom activo al reposicionar
                 }
             },
             (err) => console.error("Error GPS:", err),
@@ -320,22 +302,11 @@ function actualizarMapa(point) {
 
     actualizarPuntoPosicion(point);
 
-    if (!polyline) {
-        polyline = L.polyline(currentPath, {
-            color: '#007FFF',    
-            weight: 8,           
-            opacity: 1,          
-            lineJoin: 'round',
-            lineCap: 'round',
-            shadowBlur: 5,       
-            shadowColor: '#007FFF' 
-        }).addTo(mapa);
-    } else {
-        polyline.setLatLngs(currentPath);
-    }
+    if (!polyline) {polyline = L.polyline(currentPath, CONFIG.MAPA.TRACK_ESTILO).addTo(mapa);} 
+    else {polyline.setLatLngs(currentPath);}
 
     if (autoCenter) {
-        mapa.panTo(point);
+        mapa.setView(point, CONFIG.MAPA.ZOOM_GPS_ACTIVO); // 🔄 CORRECCIÓN 5: Mantiene el zoom de grabación estable
     }
 }
 
@@ -368,8 +339,10 @@ function stopRecording(btn) {
         localStorage.setItem('rutas_guardadas', JSON.stringify(historico));
         mostrarToast("Ruta finalizada y guardada en el historial.");
     } else {
-        console.log("🔴 [stopRecording] Detenido sin puntos acumulados.");       
-    }
+        console.log("🔴 [stopRecording] Detenido sin puntos acumulados.");
+        mostrarToast("Grabación finalizada (sin datos).");
+    };
+    releaseWakeLock();
     console.log(`🔴 [stopRecording] Finalizado. Estado resultante: isRecording = ${isRecording}`);
 }
 
@@ -380,19 +353,15 @@ export function finalizarYExportar(puntosForzados = null) {
 
         if (!puntosAGuardar || puntosAGuardar.length < 2) {
             console.log(`⚠️ [finalizarYExportar] Cancelado por falta de puntos. Longitud: ${puntosAGuardar?.length}`);
-            mostrarToast("No hay Ruta Activa.");
+            mostrarToast("No hay Ruta Cargada.");
             resolve(false); 
             return;
         }
 
-        if (marcadorPosicionUsuario) {
-            marcadorPosicionUsuario.unbindTooltip();
-        }
-        
         const nombrePorDefecto = "TRACK";
 
         console.log("💬 [finalizarYExportar] Abriendo mostrarPromptRuta...");
-        mostrarPromptRuta(nombrePorDefecto, (nombreRuta) => {
+        mostrarPromptRuta(nombrePorDefecto, async (nombreRuta) => {
             console.log(`💬 [finalizarYExportar] Callback de mostrarPromptRuta disparado. Nombre introducido: "${nombreRuta}"`);
             
             if (nombreRuta === null) {
@@ -401,6 +370,15 @@ export function finalizarYExportar(puntosForzados = null) {
                 return;
             }
 
+            // 1️⃣ PASO 1: Si se estaba grabando, DETENER la grabación primero
+            if (isRecording) {
+                console.log("⏸️ Detectada grabación activa durante el guardado. Forzando stopRecording...");
+                const btn = document.getElementById('btn-record');
+                stopRecording(btn); // Esto cambia isRecording a false y limpia el watchId del GPS
+                if (window.releaseWakeLock) await releaseWakeLock(); // Liberamos el bloqueo de pantalla
+            }
+
+            // 2️⃣ PASO 2: Procesar contenido GPX y forzar descarga de archivo
             console.log("⚙️ Procesando contenido GPX y forzando descarga de archivo...");
             const lineasGPX = puntosAGuardar.map(p => `<trkpt lat="${p[0]}" lon="${p[1]}" />`).join('\n      ');
 
@@ -437,6 +415,12 @@ export function finalizarYExportar(puntosForzados = null) {
             console.log("📥 [finalizarYExportar] Link de descarga pulsado por código.");
             mostrarToast(`Ruta guardada correctamente.`);
             
+            // 3️⃣ PASO 3: Quitar todo del mapa y resetear estados finales
+            console.log("🧹 Purgando mapa y variables tras exportación exitosa...");
+            limpiarMapaCompleto();     // Borra polílines, trackActivo, marcadores, etc.
+            currentPath = [];          // Vacía los puntos en memoria
+            esGrabacionPrevia = false; // Ya se guardó, por lo que no hay nada pendiente en pantalla
+
             console.log("📂 [finalizarYExportar] Ejecutando resolve(true)...");
             resolve(true);
         });
@@ -502,14 +486,16 @@ window.seleccionarTrack = seleccionarTrack;
 
 export function cargarTrackExterno(url, extForzada = null) {
     if (!url) return;
+    
+    console.log(`\n--- 🧭 [Omnivore] Cargando track desde URL externa ---`);
 
+    // 🔄 CORRECCIÓN 6: Carga online hereda el centro y zoom del mapa vacío por defecto
     if (!window.state.maps.nav) {
         window.state.maps.nav = L.map('nav-map', { 
             zoomControl: false,
             dragging: true,
             touchZoom: true
-        }).setView([41.828, -3.005], 14);
-
+        }).setView(CONFIG.MAPA.CENTRO_DEFECTO, CONFIG.MAPA.ZOOM_MAPA_VACIO);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(window.state.maps.nav);
     }
 
@@ -517,72 +503,71 @@ export function cargarTrackExterno(url, extForzada = null) {
     const label = document.getElementById('track-name');
 
     mapa.eachLayer(l => {
-        if (l instanceof L.Polyline || (window.L.KML && l instanceof L.KML) || l instanceof L.GPX) {
+        if (l instanceof L.Polyline || l.toGeoJSON || (window.L.KML && l instanceof L.KML)) {
             mapa.removeLayer(l);
         }
     });
 
     setTimeout(() => mapa.invalidateSize(), 200);
 
-    fetch(url)
-        .then(r => r.text())
-        .then(strData => {
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(strData, "text/xml");
-            
-            const nombreRuta = xmlDoc.querySelector('Placemark > name')?.textContent;
-            const nombreCarpeta = xmlDoc.querySelector('Folder > name')?.textContent;
-            const nombreCualquiera = xmlDoc.querySelector('name')?.textContent;
-            
-            let nombreFinal = nombreRuta || nombreCarpeta || nombreCualquiera;
-            
-            if (!nombreFinal) {
-                nombreFinal = url.split('/').pop().replace(/\.(gpx|kml)$/i, '').replace(/[-_]/g, ' ');
-            }
-
-            if (label) label.innerText = nombreFinal.trim();
-        })
-        .catch(e => console.log("Error extrayendo nombre:", e));
-
     const ext = extForzada || url.split('.').pop().toLowerCase();
+    
+   
+    try {
+       let capaOmnivore;
 
-    if (ext === 'kml') {
-        const trackKml = new L.KML(url); 
-        mapa.addLayer(trackKml);
-        trackActivo = trackKml;
+       if (ext === 'kml') {
+           console.log("🌐 Omnivore descargando KML externo...");
+           capaOmnivore = omnivore.kml(url);
+       } else {
+           console.log("🌐 Omnivore descargando GPX externo...");
+           capaOmnivore = omnivore.gpx(url);
+       }
 
-        trackKml.on("loaded", () => {
-            const bounds = trackKml.getBounds();
-            if (bounds.isValid()) {
-                mapa.fitBounds(bounds, { padding: [40, 40] });
-            }
-        });
+       // 👁️ QUITAMOS el setStyle de aquí arriba y lo metemos en el 'ready'
+
+       capaOmnivore.addTo(mapa);
+       trackActivo = capaOmnivore;
+
+       capaOmnivore.on('ready', () => {
+          console.log("🏁 Omnivore externo: Archivo descargado y procesado.");
+           
+          // 🔥 LA CLAVE ONLINE: Aplicamos el estilo de config.js AQUÍ, cuando los datos ya existen
+          capaOmnivore.setStyle(CONFIG.MAPA.TRACK_ESTILO);
         
-        setTimeout(() => {
-            const bounds = trackKml.getBounds();
-            if (bounds.isValid()) mapa.fitBounds(bounds, { padding: [40, 40] });
-        }, 600);
+          // Encuadrar el mapa
+          const bounds = capaOmnivore.getBounds();
+          if (bounds.isValid()) {
+            mapa.fitBounds(bounds, { padding: CONFIG.MAPA.PADDING_ENCUADRE });
+          }
 
-    } else {
-        const gpxTrack = new L.GPX(url, {
-            polyline_options: { color: '#007FFF', weight: 6, opacity: 0.8 },
-            marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null, wptIconUrls: {} }
-        });
-        trackActivo = gpxTrack;
+        // Intentar extraer el nombre del archivo de forma limpia...
+        try {
+            let nombreDetectado = null;
+            capaOmnivore.eachLayer(layer => {
+                if (layer.feature && layer.feature.properties && layer.feature.properties.name) {
+                    nombreDetectado = layer.feature.properties.name;
+                }
+            });
+            
+            let nombreFinal = nombreDetectado || url.split('/').pop().replace(/\.(gpx|kml)$/i, '').replace(/[-_]/g, ' ');
+            if (label) label.innerText = nombreFinal.trim();
+        } catch (eName) {
+            if (label) label.innerText = url.split('/').pop().replace(/\.(gpx|kml)$/i, '');
+        }
+    });
 
-        gpxTrack.on('loaded', e => {
-            const bounds = e.target.getBounds();
-            if (bounds.isValid()) {
-                mapa.fitBounds(bounds, { padding: [40, 40] });
-            }
-        });
-
-        gpxTrack.addTo(mapa);
-    }
+      } catch (err) {
+    console.error("❌ Error en Omnivore externo:", err);
+   }
 }
 window.cargarTrackExterno = cargarTrackExterno;
 
+
 export function cargarTrackDesdeTexto(strData, extension = 'kml') {
+    console.log(`\n--- 🗺️ [Omnivore] Cargando track desde texto plano ---`);
+    console.log(`📋 Formato: [${extension}] | Tamaño: ${strData ? strData.length : 0} caracteres`);
+
     if (!strData) return;
 
     if (!window.state.maps.nav) {
@@ -590,91 +575,99 @@ export function cargarTrackDesdeTexto(strData, extension = 'kml') {
             zoomControl: false,
             dragging: true,
             touchZoom: true
-        }).setView([41.828, -3.005], 14);
+        }).setView(CONFIG.MAPA.CENTRO_DEFECTO, CONFIG.MAPA.ZOOM_MAPA_VACIO);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(window.state.maps.nav);
     }
 
     const mapa = window.state.maps.nav;
     const label = document.getElementById('track-name');
 
+    // FORCE CLEAN: Borramos de forma absoluta cualquier polilínea, capa GeoJSON o rastro anterior
     mapa.eachLayer(l => {
-        if (l instanceof L.Polyline || (window.L.KML && l instanceof L.KML) || l instanceof L.GPX) {
+        if (l instanceof L.Polyline || l.toGeoJSON || (l.feature)) {
             mapa.removeLayer(l);
         }
     });
 
-    setTimeout(() => mapa.invalidateSize(), 200);
+    setTimeout(() => mapa.invalidateSize(), 100);
 
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(strData, "text/xml");
-    
-    const nombreRuta = xmlDoc.querySelector('Placemark > name, trk > name')?.textContent;
-    const nombreCarpeta = xmlDoc.querySelector('Folder > name')?.textContent;
-    const nombreCualquiera = xmlDoc.querySelector('name')?.textContent;
-    
-    let nombreFinal = nombreRuta || nombreCarpeta || nombreCualquiera || "Ruta Local";
+    const matchName = strData.match(/<name>(.*?)<\/name>/);
+    let nombreFinal = matchName ? matchName[1] : "Ruta Local";
     if (label) label.innerText = nombreFinal.trim();
 
+    try {
+    let capaOmnivore;
+
     if (extension === 'kml') {
-        const trackKml = new L.KML(xmlDoc); 
-        mapa.addLayer(trackKml);
-
-        trackKml.on("loaded", () => {
-            const bounds = trackKml.getBounds();
-            if (bounds.isValid()) mapa.fitBounds(bounds, { padding: [40, 40] });
-        });
-
-        setTimeout(() => {
-            if (trackKml.getBounds().isValid()) mapa.fitBounds(trackKml.getBounds(), { padding: [40, 40] });
-        }, 600);
-
-    } else if (extension === 'gpx') {
-        const gpxTrack = new L.GPX(strData, {
-            polyline_options: { color: '#007FFF', weight: 6, opacity: 0.8 },
-            marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null, wptIconUrls: {} }
-        });
-
-        gpxTrack.on('loaded', e => {
-            const bounds = e.target.getBounds();
-            if (bounds.isValid()) mapa.fitBounds(bounds, { padding: [40, 40] });
-        });
-
-        gpxTrack.addTo(mapa);
+        console.log("🧩 Omnivore procesando string KML local...");
+        capaOmnivore = omnivore.kml.parse(strData);
+    } else {
+        console.log("🧩 Omnivore procesando string GPX local...");
+        capaOmnivore = omnivore.gpx.parse(strData);
     }
+
+    // 🚀 TRUCO MAESTRO OFFLINE:
+    // Forzamos el estilo tanto a la capa GeoJSON madre como a cada una de las líneas hijas de Leaflet
+    capaOmnivore.setStyle(CONFIG.MAPA.TRACK_ESTILO);
+    capaOmnivore.eachLayer(layer => {
+        if (layer.setStyle) layer.setStyle(CONFIG.MAPA.TRACK_ESTILO);
+    });
+
+    capaOmnivore.addTo(mapa);
+    trackActivo = capaOmnivore; 
+
+    // Encuadramos inmediatamente usando tus parámetros
+    const bounds = capaOmnivore.getBounds();
+    if (bounds.isValid()) {
+        console.log("🎯 Encuadre inmediato ejecutado con CONFIG.MAPA.PADDING_ENCUADRE");
+        mapa.fitBounds(bounds, { padding: CONFIG.MAPA.PADDING_ENCUADRE });
+    }
+
+    // Salvavidas por si Leaflet necesita estirar el contenedor
+    setTimeout(() => {
+        if (capaOmnivore.getBounds && capaOmnivore.getBounds().isValid()) {
+            // Volvemos a machacar el estilo por si acaso en el refresco
+            capaOmnivore.setStyle(CONFIG.MAPA.TRACK_ESTILO);
+            mapa.fitBounds(capaOmnivore.getBounds(), { padding: CONFIG.MAPA.PADDING_ENCUADRE });
+            console.log("🔄 Re-encuadre de seguridad offline completado.");
+        }
+    }, 350);
+
+} catch (err) {
+    console.error("❌ Error crítico en el motor Omnivore offline:", err);
+}
 }
 window.cargarTrackDesdeTexto = cargarTrackDesdeTexto;
 
-export function asegurarMapaInicializado() {
-    if (window.state.maps.nav) return;
+async function requestWakeLock() {
+    if ('wakeLock' in navigator && !navWakeLock) {
+        try { 
+            navWakeLock = await navigator.wakeLock.request('screen'); 
+            console.log("Pantalla bloqueada: No se apagará.");
 
-    const mapContainer = document.getElementById('nav-map');
-    if (!mapContainer) return;
-
-    console.log("Inicializando contenedor de mapa...");
-
-    if (mapContainer._leaflet_id) {
-        mapContainer._leaflet_id = null;
-    }
-
-    try {
-        window.state.maps.nav = L.map('nav-map', {
-            zoomControl: false,
-            dragging: true,
-            zoomAnimation: true
-        }).setView([41.828, -3.005], 14);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(window.state.maps.nav);
-
-        console.log("Mapa de navegación listo.");
-        
-        // 🔥 LLAMADA UNIFICADA: Registra la entrada a la pantalla del mapa
-        activateScreenLock();
-    } catch (e) {
-        console.error("Error al crear el mapa:", e);
+            navWakeLock.addEventListener('release', () => {
+                console.log('Wake Lock liberado por el sistema.');
+                navWakeLock = null;
+            });
+        } catch (e) {
+            console.error("Fallo al bloquear pantalla:", e);
+        }
     }
 }
+
+export async function releaseWakeLock() {
+    if (navWakeLock) {
+        try {
+            await navWakeLock.release();
+            navWakeLock = null;
+            console.log("Pantalla desbloqueada: Volviendo al comportamiento original.");
+        } catch (e) {
+            console.error("Error al liberar Wake Lock:", e);
+        }
+    }
+}
+
+window.releaseWakeLock = releaseWakeLock;
 
 export function toggleseguir() {
     const btn = document.getElementById('btn-seguir');
@@ -688,7 +681,8 @@ export function toggleseguir() {
         iniciarSeguimientoGPS();
         
         if (ultimaPosicion && window.state.maps.nav) {
-            window.state.maps.nav.panTo(ultimaPosicion);
+            // 🔄 CORRECCIÓN 12: Al activar seguir manualmente, vuela a la posición con ZOOM_GPS_ACTIVO
+            window.state.maps.nav.setView(ultimaPosicion, CONFIG.MAPA.ZOOM_GPS_ACTIVO);
         }
         
         mostrarToast("Seguimiento GPS activado");
@@ -702,9 +696,10 @@ export function toggleseguir() {
             const bounds = trackActivo.getBounds();
             
             if (bounds.isValid()) {
+                // 🔄 CORRECCIÓN 13: Al soltar mapa, re-encuadra la ruta usando tu PADDING_ENCUADRE y el MAX_ZOOM de config
                 mapa.fitBounds(bounds, {
-                    padding: [50, 50],
-                    maxZoom: 16
+                    padding: CONFIG.MAPA.PADDING_ENCUADRE,
+                    maxZoom: CONFIG.MAPA.MAX_ZOOM || 16
                 });
                 mostrarToast("Mapa libre: mostrando ruta completa");
             } else {
@@ -737,8 +732,13 @@ export function ciclarCapas() {
 
 window.ciclarCapas = ciclarCapas;
 
-export async function releaseWakeLock() {
-    // 🔥 LLAMADA UNIFICADA: Libera el hardware limpiamente de forma global
-    await releaseScreenLock();
-}
-window.releaseWakeLock = releaseWakeLock;
+document.addEventListener('visibilitychange', async () => {
+    const mapContainer = document.getElementById('nav-map');
+    console.log(`📱 [visibilitychange] Estado de visibilidad modificado a: ${document.visibilityState}`);
+    
+    // Solo re-solicitamos el bloqueo si vuelve a estar visible Y la app estaba grabando activamente
+    if (document.visibilityState === 'visible' && isRecording && mapContainer) {
+        await requestWakeLock();
+    }
+});
+

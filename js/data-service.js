@@ -122,33 +122,74 @@ export function formatPwaUrl(url) {
 }
 
 export async function loadAllData() {
-    // Aseguramos que ambas bases de datos estén creadas y listas antes del parseo de datos
+    // Aseguramos que ambas bases de datos estén creadas y listas
     await initPersistenteDB();
     await initDB();
 
+    const promesasCarga = [];
+
     for (let key in CONFIG.URLS) {
-        Papa.parse(CONFIG.URLS[key], {
-            download: true,
-            downloadRequest: {
-                headers: { 'Accept': 'text/csv' },
-                mode: 'cors' 
-            },
-            complete: (results) => {
-                if (key === 'duendes') {
-                    const capturados = state.game?.captured || [];
-                    state.db.duendes = results.data.slice(1).filter(d => 
-                        !capturados.some(c => c[0] === d[0])
-                    );
-                    console.log(`✓ Duendes listos: ${state.db.duendes.length}`);
-                } else {
-                    state.db[key] = results.data.slice(1);
-                    console.log(`✓ Datos de ${key} cargados`);
-                }
-            },
-            error: (err) => {
-                console.error(`Error cargando CSV (${key}):`, err);
+        const promesaCsv = new Promise(async (resolve) => {
+            // 1. Intentamos leer el CSV guardado en IndexedDB usando su 'key'
+            const csvGuardado = await getFile(`csv_${key}`);
+
+            if (csvGuardado) {
+                // Si existe localmente, parseamos directamente el texto guardado
+                Papa.parse(csvGuardado, {
+                    complete: (results) => {
+                        procesarDatosCSV(key, results.data);
+                        resolve();
+                    },
+                    error: (err) => {
+                        console.error(`Error parseando CSV local (${key}):`, err);
+                        resolve();
+                    }
+                });
+            } else {
+                // 2. SALVAVIDAS: Si no existiera en la DB, lo descarga (solo pasará si algo se corrompe)
+                console.warn(`⚠️ CSV de ${key} no encontrado en IndexedDB. Descargando de emergencia...`);
+                Papa.parse(CONFIG.URLS[key], {
+                    download: true,
+                    downloadRequest: {
+                        headers: { 'Accept': 'text/csv' },
+                        mode: 'cors' 
+                    },
+                    complete: async (results) => {
+                        procesarDatosCSV(key, results.data);
+                        // Convertimos los datos de nuevo a texto CSV para guardarlos limpios
+                        const csvTexto = Papa.unparse(results.data);
+                        await saveFile(`csv_${key}`, new Blob([csvTexto], { type: 'text/csv' }));
+                        resolve();
+                    },
+                    error: (err) => {
+                        console.error(`Error en descarga de emergencia CSV (${key}):`, err);
+                        resolve();
+                    }
+                });
             }
         });
+
+        promesasCarga.push(promesaCsv);
+    }
+
+    await Promise.all(promesasCarga);
+    console.log("⚙️ Todos los datos se han cargado desde IndexedDB.");
+}
+
+// Función auxiliar interna para no repetir código de asignación de datos
+function procesarDatosCSV(key, data) {
+    if (key === 'duendes') {
+        const capturados = state.game?.captured || [];
+        state.db.duendes = data.slice(1).filter(d => 
+            !capturados.some(c => c[0] === d[0])
+        );
+        console.log(`✓ Duendes listos: ${state.db.duendes.length}`);
+    } else {
+        state.db[key] = data.slice(1);
+        console.log(`✓ Datos de ${key} cargados`);
     }
 }
+
+
+
 

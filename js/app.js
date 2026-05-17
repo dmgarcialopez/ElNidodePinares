@@ -4,11 +4,142 @@ import * as Game from './game-engine.js';
 import * as Data from './data-service.js';
 import { state } from './state.js';
 import * as Nav from './nav-engine.js';
+import { CONFIG } from './config.js';
 
-// 🔌 Centralización: CACHE_NAME eliminada. La versión se lee dinámicamente desde el SW.
+// --- FUNCIONES PARA LA RUEDA DE CARGA INICIAL ---
+function mostrarCargandoInicial() {
+    // 1. Bloquear clics en los botones principales
+    const botones = document.querySelectorAll('.menu-principal .btn-circle');
+    botones.forEach(btn => {
+        btn.disabled = true;
+        btn.style.cursor = 'wait';
+    });
 
+    if (document.getElementById('app-spinner-global')) return;
+
+    // 2. Crear la capa y la rueda animada por encima de todo
+    const spinnerContainer = document.createElement('div');
+    spinnerContainer.id = 'app-spinner-global';
+    
+    Object.assign(spinnerContainer.style, {
+        position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)', zIndex: '99999', pointerEvents: 'auto'
+    });
+
+    spinnerContainer.innerHTML = `
+        <div style="text-align: center;">
+            <svg width="60" height="60" viewBox="0 0 50 50" style="animation: spin 1s linear infinite;">
+                <circle cx="25" cy="25" r="20" fill="none" stroke="#a5d6a7" stroke-width="5" stroke-dasharray="31.4 31.4" stroke-linecap="round"></circle>
+            </svg>
+            <p style="color: white; font-weight: bold; margin-top: 15px; text-shadow: 2px 2px 4px black; font-family: sans-serif;">
+                Cargando Datos...
+            </p>
+        </div>
+        <style>
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        </style>
+    `;
+    document.body.appendChild(spinnerContainer);
+}
+
+function ocultarCargandoInicial() {
+    // 1. Reactivar los botones
+    const botones = document.querySelectorAll('.menu-principal .btn-circle');
+    botones.forEach(btn => {
+        btn.disabled = false;
+        btn.style.cursor = 'pointer';
+    });
+
+    // 2. Quitar la rueda de la pantalla
+    const spinner = document.getElementById('app-spinner-global');
+    if (spinner) spinner.remove();
+}
+
+// ⚙️ FUNCIÓN AISLADA: Gestiona el control inteligente de versiones
+async function gestionarControlVersiones() {
+    try {
+        await Data.loadAllData();
+
+        let cacheNameDelSW = 'ENDP.1.0'; 
+        try {
+            const cacheKeys = await caches.keys();
+            const miCacheApp = cacheKeys.find(key => key.startsWith('ENDP.'));
+            if (miCacheApp) {
+                const cacheAbierta = await caches.open(miCacheApp);
+                const respuestaVersion = await cacheAbierta.match('/pwa-version.txt');
+                if (respuestaVersion) {
+                    cacheNameDelSW = await respuestaVersion.text();
+                }
+            }
+        } catch (e) {
+            console.warn("⚠️ No se pudo leer la versión de la caché aún, usando fallback.");
+        }
+
+        const versionActualApp = cacheNameDelSW.replace('ENDP.', ''); 
+        const versionElement = document.getElementById('app-version');
+        if (versionElement) {
+           versionElement.innerText = `v${versionActualApp}`;
+        }
+        let versionGuardadaDB = await Data.getVersionGuardada();
+
+        if (versionGuardadaDB && versionGuardadaDB.split('.').length > 2) {
+            versionGuardadaDB = "0.0"; 
+        }
+        if (!versionGuardadaDB) {
+            versionGuardadaDB = "0.0";
+        }
+
+        console.log(`🔍 Control de Versiones -> Detectada desde SW: ${versionActualApp} | Local Almacenado: ${versionGuardadaDB}`);
+
+        if (versionActualApp !== versionGuardadaDB) {
+            const partesActuales = versionActualApp.toUpperCase().replace('V', '').split('.');
+            const partesGuardadas = versionGuardadaDB.toUpperCase().replace('V', '').split('.');
+
+            const majorActual = Number(partesActuales[0]) || 0;
+            const minorActual = Number(partesActuales[1]) || 0;
+
+            const majorGuardada = Number(partesGuardadas[0]) || 0;
+            const minorGuardada = Number(partesGuardadas[1]) || 0;
+
+            if (majorActual !== majorGuardada || versionGuardadaDB === "0.0") {
+                console.log(`🚨 DETECTADO CAMBIO MAYOR (${majorGuardada}.x ➡️ ${majorActual}.x). Purgando descargas...`);
+                
+                await Data.borrarDBCacheDescargas();
+                await descargarYGuardarGoogleSheets();
+                await Data.loadAllData(); 
+                
+                console.log("📥 Iniciando descarga e indexación del nuevo paquete masivo de datos...");
+                await syncHeavyFiles();
+                ocultarCargandoInicial();
+            } 
+            else {
+                console.log(`⚙️ Detectado cambio Menor (${majorGuardada}.${minorGuardada} ➡️ ${majorActual}.${minorActual}). Se respetan los archivos existentes.`);
+                await descargarYGuardarGoogleSheets();
+                await syncHeavyFiles();
+                ocultarCargandoInicial();
+            }
+
+            await Data.saveVersionPersistente(versionActualApp);
+            console.log(`✅ Registro de versión actualizado localmente a: ${versionActualApp}`);
+
+        } else {
+            console.log("✅ La aplicación local ya coincide con la última versión del servidor. Saltando limpiezas.");
+            await syncHeavyFiles();
+            ocultarCargandoInicial();
+        }
+
+    } catch (err) {
+        console.error("❌ Error crítico gestionando el control de versiones de las bases de datos:", err);
+        ocultarCargandoInicial();
+    }
+}
+
+// Activar el escudo visual inmediatamente
+mostrarCargandoInicial();
+
+// Registro del Service Worker
 if ('serviceWorker' in navigator) {
-    // 1. Escuchar mensajes ANTES de registrar
     navigator.serviceWorker.addEventListener('message', event => {
         if (event.data && event.data.type === 'TOAST') {
             const toast = document.getElementById('pwa-toast');
@@ -20,15 +151,12 @@ if ('serviceWorker' in navigator) {
         }
     });
 
-    // 2. Registro con ruta relativa pura + Cache Buster
     const swUrl = 'sw.js?v=' + new Date().getTime();
 
     navigator.serviceWorker.register(swUrl) 
         .then(reg => {
             console.log("✅ SW registrado en el subdominio:", reg.scope);
             
-            // ⚡ OPTIMIZACIÓN CRÍTICA: Detectar cambios de estado en tiempo real
-            // Si el SW se está instalando ahora mismo, esperamos a que se active para comprobar las versiones sin perder un segundo
             if (reg.installing) {
                 reg.installing.addEventListener('statechange', (e) => {
                     if (e.target.state === 'activated') {
@@ -37,20 +165,18 @@ if ('serviceWorker' in navigator) {
                     }
                 });
             } else {
-                // Si ya está activo o controlado, ejecutamos de inmediato
                 gestionarControlVersiones();
             }
 
-            // Forzar revisión de actualización en el servidor
             reg.update();
         })
         .catch(err => {
             console.error("❌ Error en el registro:", err);
-            // Si falla el SW por lo que sea (ej: desarrollo local raro), ejecutamos el control para no romper la app
             gestionarControlVersiones(); 
         });
 }
 
+// Función encargada de las descargas pesadas (Corregida colocación del bucle)
 async function syncHeavyFiles() {
     const filesToSync = [
         '/tracks/ABEDULARDEMURIELVIEJO.kml',
@@ -163,8 +289,20 @@ async function syncHeavyFiles() {
             console.log(`Descargando para IndexedDB: ${url}`);
             try {
                 const res = await fetch(url);
-                const blob = await res.blob();
-                await Data.saveFile(url, blob);
+                const originalBlob = await res.blob();
+
+                const extension = url.split('.').pop().toLowerCase();
+                let tipoMime = originalBlob.type;
+
+                if (extension === 'kml') {
+                    tipoMime = 'application/vnd.google-earth.kml+xml';
+                } else if (extension === 'gpx') {
+                    tipoMime = 'application/gpx+xml';
+                }
+
+                const blobConCabecera = new Blob([originalBlob], { type: tipoMime });
+                await Data.saveFile(url, blobConCabecera);
+                
             } catch (e) {
                 console.error("Error descargando:", url);
             }
@@ -172,95 +310,12 @@ async function syncHeavyFiles() {
     }
 }
 
-// ⚙️ FUNCIÓN AISLADA: Gestiona el control inteligente de versiones de dos dígitos de forma reactiva
-async function gestionarControlVersiones() {
-    try {
-        await Data.loadAllData();
-
-        // Buscamos dinámicamente en las cachés del navegador el archivo de control
-        let cacheNameDelSW = 'ENDP.1.0'; // Fallback por defecto ajustado a tu versión actual
-        try {
-            const cacheKeys = await caches.keys();
-            const miCacheApp = cacheKeys.find(key => key.startsWith('ENDP.'));
-            if (miCacheApp) {
-                const cacheAbierta = await caches.open(miCacheApp);
-                const respuestaVersion = await cacheAbierta.match('/pwa-version.txt');
-                if (respuestaVersion) {
-                    cacheNameDelSW = await respuestaVersion.text();
-                }
-            }
-        } catch (e) {
-            console.warn("⚠️ No se pudo leer la versión de la caché aún, usando fallback.");
-        }
-
-        // Extraemos la versión limpia (ej: de 'ENDP.1.0' extrae '1.0')
-        const versionActualApp = cacheNameDelSW.replace('ENDP.', ''); 
-        const versionElement = document.getElementById('app-version');
-        if (versionElement) {
-           versionElement.innerText = `v${versionActualApp}`;
-        }
-        let versionGuardadaDB = await Data.getVersionGuardada();
-
-        // Limpieza de seguridad si queda rastro del formato antiguo de 3 dígitos (ej: '1.1.3')
-        if (versionGuardadaDB && versionGuardadaDB.split('.').length > 2) {
-            versionGuardadaDB = "0.0"; 
-        }
-        // Si por algún motivo la BD está vacía por completo
-        if (!versionGuardadaDB) {
-            versionGuardadaDB = "0.0";
-        }
-
-        console.log(`🔍 Control de Versiones -> Detectada desde SW: ${versionActualApp} | Local Almacenado: ${versionGuardadaDB}`);
-
-        if (versionActualApp !== versionGuardadaDB) {
-            
-            // Processamiento limpio de 2 dígitos estrictos extraídos por el punto '.'
-            const partesActuales = versionActualApp.toUpperCase().replace('V', '').split('.');
-            const partesGuardadas = versionGuardadaDB.toUpperCase().replace('V', '').split('.');
-
-            const majorActual = Number(partesActuales[0]) || 0;
-            const minorActual = Number(partesActuales[1]) || 0;
-
-            const majorGuardada = Number(partesGuardadas[0]) || 0;
-            const minorGuardada = Number(partesGuardadas[1]) || 0;
-
-            // --- CASO A: DETECTADO UN CAMBIO EN EL PRIMER DÍGITO (MAJOR) ---
-            if (majorActual !== majorGuardada || versionGuardadaDB === "0.0") {
-                console.log(`🚨 DETECTADO CAMBIO MAYOR (${majorGuardada}.x ➡️ ${majorActual}.x). Purgando descargas...`);
-                
-                await Data.borrarDBCacheDescargas();
-                await Data.loadAllData(); // Relevanta la estructura de datos limpia
-                
-                console.log("📥 Iniciando descarga e indexación del nuevo paquete masivo de datos...");
-                await syncHeavyFiles();
-            } 
-            // --- CASO B: DETECTADO CAMBIO EN EL SEGUNDO DÍGITO (MINOR) ---
-            else {
-                console.log(`⚙️ Detectado cambio Menor (${majorGuardada}.${minorGuardada} ➡️ ${majorActual}.${minorActual}). Se respetan los archivos existentes.`);
-                await syncHeavyFiles();
-            }
-
-            // Guardamos la nueva versión de dos dígitos en la base de datos persistente
-            await Data.saveVersionPersistente(versionActualApp);
-            console.log(`✅ Registro de versión actualizado localmente a: ${versionActualApp}`);
-
-        } else {
-            console.log("✅ La aplicación local ya coincide con la última versión del servidor. Saltando limpiezas.");
-            await syncHeavyFiles();
-        }
-
-    } catch (err) {
-        console.error("❌ Error crítico gestionando el control de versiones de las bases de datos:", err);
-    }
-}
-
+// Listeners de la interfaz de usuario
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. LIMPIEZA DE HISTORIAL AL ARRANCAR
     window.history.replaceState({ screen: 'home' }, "", "");
     UI.showScreen('home');
     console.log("Centralita reseteada y en Home.");
 
-    // 3. CONEXIÓN DEL MENÚ PRINCIPAL
     document.getElementById('btn-pois')?.addEventListener('click', () => { UI.showMap('pois'); });
     document.getElementById('btn-bici')?.addEventListener('click', () => { UI.renderBiciList(); });
     document.getElementById('btn-walk')?.addEventListener('click', () => { UI.renderPaseoList(); });
@@ -275,13 +330,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('btn-nav')?.addEventListener('click', ()  => { UI.showScreen('nav');});
 
-    // 4. CONEXIÓN DE PANTALLAS INTERNAS
     document.getElementById('btn-album')?.addEventListener('click', () => {
         UI.showScreen('album');
         UI.renderAlbumContent();
     });
-    window.history.replaceState({ screen: 'home' }, "", ""); 
-    UI.showScreen('home');
     console.log("¡Centralita conectada!");
 }); 
 
@@ -363,3 +415,20 @@ window.onpopstate = function(event) {
     }
 };
 
+async function descargarYGuardarGoogleSheets() {
+    console.log("📥 Descargando hojas de Google Sheets actualizadas de Internet...");
+    for (let key in Data.CONFIG?.URLS || CONFIG.URLS) {
+        const urlGoogle = Data.CONFIG?.URLS[key] || CONFIG.URLS[key];
+        try {
+            const res = await fetch(urlGoogle, { headers: { 'Accept': 'text/csv' } });
+            if (res.ok) {
+                const textoCsv = await res.text();
+                const blob = new Blob([textoCsv], { type: 'text/csv' });
+                await Data.saveFile(`csv_${key}`, blob);
+                console.log(`✓ Guardado en IndexedDB: csv_${key}`);
+            }
+        } catch (e) {
+            console.error(`❌ Error descargando Google Sheet para ${key}:`, e);
+        }
+    }
+}
